@@ -57,5 +57,5 @@ final class JavaStructureColors {
     // ── control-flow highlight ─────────────────────────────────────────────────
     /** Used by the Control-Flow View mode to mark if/else/switch blocks. */
     static final Color CONTROL_FLOW_COLOR = new Color(0xd1, 0x75, 0x24);  // #d17524
-    static final float CONTROL_FLOW_ALPHA = 0.55f;
+    static final float CONTROL_FLOW_ALPHA = 0.40f;  // was 0.55 – lowered by 15 %
 }

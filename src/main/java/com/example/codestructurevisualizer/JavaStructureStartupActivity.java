@@ -22,6 +22,8 @@ public final class JavaStructureStartupActivity implements StartupActivity.DumbA
                 project.getService(CamelCaseSpacingService.class);
         SyntaxEmphasisService emphasisService =
                 project.getService(SyntaxEmphasisService.class);
+        MarkerService markerService =
+                project.getService(MarkerService.class);
 
         // ── file-open / selection-change listener ────────────────────────────
         project.getMessageBus().connect(service).subscribe(
@@ -34,6 +36,7 @@ public final class JavaStructureStartupActivity implements StartupActivity.DumbA
                         service.scheduleRefresh(file);
                         spacingService.scheduleRefresh(file);
                         emphasisService.scheduleRefresh(file);
+                        markerService.scheduleRefresh(file);
                     }
 
                     @Override
@@ -42,6 +45,7 @@ public final class JavaStructureStartupActivity implements StartupActivity.DumbA
                         service.scheduleRefresh(event.getNewFile());
                         spacingService.scheduleRefresh(event.getNewFile());
                         emphasisService.scheduleRefresh(event.getNewFile());
+                        markerService.scheduleRefresh(event.getNewFile());
                     }
                 }
         );
@@ -59,17 +63,20 @@ public final class JavaStructureStartupActivity implements StartupActivity.DumbA
                     }
                 }, service);
 
-        // ── caret listener – refreshes inspection overlay on cursor move ─────
+        // ── caret listener – refreshes inspection overlay AND cf-focus on cursor move ─────
         EditorFactory.getInstance().getEventMulticaster().addCaretListener(
                 new CaretListener() {
                     @Override
                     public void caretPositionChanged(@NotNull CaretEvent e) {
-                        if (!service.isInspectionModeEnabled()) return;
                         Editor editor = e.getEditor();
                         VirtualFile file = FileDocumentManager.getInstance()
                                 .getFile(editor.getDocument());
-                        if (file != null) {
+                        if (file == null) return;
+                        if (service.isInspectionModeEnabled()) {
                             service.scheduleInspectionRefreshForEditor(editor, file);
+                        }
+                        if (service.isControlFlowModeEnabled()) {
+                            service.scheduleControlFlowFocusRefreshForEditor(editor, file);
                         }
                     }
                 }, service);
@@ -77,5 +84,6 @@ public final class JavaStructureStartupActivity implements StartupActivity.DumbA
         service.scheduleRefreshAll();
         spacingService.scheduleRefreshAll();
         emphasisService.scheduleRefreshAll();
+        markerService.scheduleRefreshAll();
     }
 }

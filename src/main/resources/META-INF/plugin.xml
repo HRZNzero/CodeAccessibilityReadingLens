@@ -20,6 +20,8 @@
         <projectService serviceImplementation="com.example.codestructurevisualizer.CamelCaseSpacingService"/>
         <projectService serviceImplementation="com.example.codestructurevisualizer.SyntaxEmphasisSettings"/>
         <projectService serviceImplementation="com.example.codestructurevisualizer.SyntaxEmphasisService"/>
+        <projectService serviceImplementation="com.example.codestructurevisualizer.MarkerService"/>
+        <projectService serviceImplementation="com.example.codestructurevisualizer.JavaStructureHighlighterService"/>
     </extensions>
 
     <actions>
@@ -81,7 +83,7 @@
                 class="com.example.codestructurevisualizer.ToggleWiderFieldSpacingAction"
                 text="Toggle Wider Field Spacing"
                 description="Add a thin separator gap between consecutive field background rows">
-            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift L"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift K"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
 
@@ -91,6 +93,39 @@
                 text="Toggle Control-Flow View"
                 description="Highlight all if/else/switch blocks in orange; hides level colouring">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift O"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
+        <!-- ── marker system ─────────────────────────────────────────────── -->
+        <action id="CodeStructureVisualizer.PlaceMarker"
+                class="com.example.codestructurevisualizer.PlaceMarkerAction"
+                text="Toggle Line Marker"
+                description="Place or remove a marker on the current line (orange gutter stripe)">
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift M"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
+        <action id="CodeStructureVisualizer.JumpToNextMarker"
+                class="com.example.codestructurevisualizer.JumpToNextMarkerAction"
+                text="Jump to Next Marker"
+                description="Move caret to the next marker in the file, wrapping around">
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt DOWN"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
+        <action id="CodeStructureVisualizer.JumpToPrevMarker"
+                class="com.example.codestructurevisualizer.JumpToPrevMarkerAction"
+                text="Jump to Previous Marker"
+                description="Move caret to the previous marker in the file, wrapping around">
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt UP"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
+        <action id="CodeStructureVisualizer.ToggleMarkerFocus"
+                class="com.example.codestructurevisualizer.ToggleMarkerFocusAction"
+                text="Toggle Marker Focus Mode"
+                description="Dim and fold all non-marked lines so only marked sections are visible">
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift H"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>

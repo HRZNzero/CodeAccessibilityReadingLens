@@ -7,6 +7,7 @@ import com.intellij.openapi.components.Service;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.LogicalPosition;
+import com.intellij.openapi.editor.SelectionModel;
 import com.intellij.openapi.editor.markup.CustomHighlighterRenderer;
 import com.intellij.openapi.editor.markup.HighlighterLayer;
 import com.intellij.openapi.editor.markup.HighlighterTargetArea;
@@ -53,9 +54,12 @@ public final class JavaStructureHighlighterService implements Disposable {
             Key.create("code.structure.visualizer.highlighters");
     private static final Key<List<RangeHighlighter>> INSPECTION_HIGHLIGHTERS_KEY =
             Key.create("code.structure.visualizer.inspection.highlighters");
+    private static final Key<List<RangeHighlighter>> CF_FOCUS_KEY =
+            Key.create("code.structure.visualizer.cf.focus.highlighters");
 
     private final Project project;
     private final Alarm refreshAlarm;
+    private final Alarm cfFocusAlarm;
 
     // ── toggle flags ──────────────────────────────────────────────────────────
     private boolean enabled                 = true;
@@ -70,7 +74,8 @@ public final class JavaStructureHighlighterService implements Disposable {
 
     public JavaStructureHighlighterService(@NotNull Project project) {
         this.project = project;
-        this.refreshAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
+        this.refreshAlarm  = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
+        this.cfFocusAlarm  = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
     }
 
     // ── public toggle API ─────────────────────────────────────────────────────
@@ -121,6 +126,20 @@ public final class JavaStructureHighlighterService implements Disposable {
             Runnable r = () -> {
                 PsiFile psiFile = PsiManager.getInstance(project).findFile(file);
                 if (psiFile instanceof PsiJavaFile jf) refreshInspectionForEditor(editor, jf);
+            };
+            if (ApplicationManager.getApplication().isReadAccessAllowed()) r.run();
+            else ApplicationManager.getApplication().runReadAction(r);
+        }, 80);
+    }
+
+    /** Called from the caret listener when control-flow mode is active. */
+    public void scheduleControlFlowFocusRefreshForEditor(@NotNull Editor editor, @NotNull VirtualFile file) {
+        cfFocusAlarm.cancelAllRequests();
+        cfFocusAlarm.addRequest(() -> {
+            if (project.isDisposed()) return;
+            Runnable r = () -> {
+                PsiFile psiFile = PsiManager.getInstance(project).findFile(file);
+                if (psiFile instanceof PsiJavaFile jf) refreshCFFocusForEditor(editor, jf);
             };
             if (ApplicationManager.getApplication().isReadAccessAllowed()) r.run();
             else ApplicationManager.getApplication().runReadAction(r);
@@ -255,6 +274,80 @@ public final class JavaStructureHighlighterService implements Disposable {
         }
     }
 
+    // ── control-flow cursor focus ─────────────────────────────────────────────
+
+    /**
+     * When the caret moves inside a CF block while CF mode is active,
+     * dims every OTHER top-level CF block with a dark overlay so only the
+     * active one retains its original colour.
+     */
+    private void refreshCFFocusForEditor(@NotNull Editor editor, @NotNull PsiJavaFile javaFile) {
+        clearCFFocusHighlights(editor);
+        if (!controlFlowModeEnabled) return;
+
+        int caretOffset = editor.getCaretModel().getOffset();
+        PsiElement atCaret = javaFile.findElementAt(caretOffset);
+        PsiElement activeCF = findParentControlFlow(atCaret);
+        if (activeCF == null) { repaint(editor); return; }   // not inside any CF block
+
+        TextRange activeRange = activeCF.getTextRange();
+        boolean indented = indentedBoxesEnabled;
+        List<RangeHighlighter> hl = new ArrayList<>();
+
+        // Collect all CF-block ranges in the file (mirrors annotateControlFlow)
+        List<TextRange> allRanges = new ArrayList<>();
+        javaFile.accept(new JavaRecursiveElementWalkingVisitor() {
+            @Override public void visitIfStatement(@NotNull PsiIfStatement s) {
+                TextRange r = s.getTextRange();
+                if (r != null && !r.isEmpty()) allRanges.add(r);
+                super.visitIfStatement(s);
+            }
+            @Override public void visitSwitchStatement(@NotNull PsiSwitchStatement s) {
+                TextRange r = s.getTextRange();
+                if (r != null && !r.isEmpty()) allRanges.add(r);
+                super.visitSwitchStatement(s);
+            }
+            @Override public void visitSwitchExpression(@NotNull PsiSwitchExpression s) {
+                TextRange r = s.getTextRange();
+                if (r != null && !r.isEmpty()) allRanges.add(r);
+                super.visitSwitchExpression(s);
+            }
+        });
+
+        // Dim blocks that are NOT the active block and NOT contained inside it
+        for (TextRange r : allRanges) {
+            if (!r.equals(activeRange) && !activeRange.contains(r)) {
+                addLineBlockAtLayer(editor, r, new Color(0x10, 0x10, 0x10), 0.22f, hl,
+                        HighlighterLayer.ADDITIONAL_SYNTAX + 200, indented, 0);
+            }
+        }
+
+        editor.putUserData(CF_FOCUS_KEY, hl);
+        repaint(editor);
+    }
+
+    @Nullable
+    private static PsiElement findParentControlFlow(@Nullable PsiElement element) {
+        PsiElement cur = element;
+        while (cur != null) {
+            if (cur instanceof PsiIfStatement) return cur;
+            if (cur instanceof PsiSwitchStatement) return cur;
+            if (cur instanceof PsiSwitchExpression) return cur;
+            cur = cur.getParent();
+        }
+        return null;
+    }
+
+    private static void clearCFFocusHighlights(@NotNull Editor editor) {
+        List<RangeHighlighter> ex = editor.getUserData(CF_FOCUS_KEY);
+        if (ex != null) {
+            MarkupModel mm = editor.getMarkupModel();
+            for (RangeHighlighter h : ex) if (h.isValid()) mm.removeHighlighter(h);
+            ex.clear();
+            editor.putUserData(CF_FOCUS_KEY, null);
+        }
+    }
+
     // ── annotation helpers ────────────────────────────────────────────────────
 
     private static void annotateMethods(@NotNull PsiClass cls, @NotNull Editor editor,
@@ -304,17 +397,26 @@ public final class JavaStructureHighlighterService implements Disposable {
                                             @NotNull List<RangeHighlighter> out,
                                             boolean wideSpacing, boolean indented) {
         if (wideSpacing) {
-            // ── per-field with top inset ──────────────────────────────────────
+            // ── one continuous group block + thin divider lines between fields ─
+            TextRange group = null;
+            List<TextRange> fieldRanges = new ArrayList<>();
             for (PsiElement child : cls.getChildren()) {
                 if (child instanceof PsiField) {
                     TextRange r = child.getTextRange();
-                    if (r != null && !r.isEmpty())
-                        addLineBlockAtLayer(editor, r,
-                                JavaStructureColors.FIELD_GROUP_COLOR,
-                                JavaStructureColors.FIELD_GROUP_ALPHA,
-                                out, HighlighterLayer.ADDITIONAL_SYNTAX, indented, 4);
+                    if (r == null || r.isEmpty()) continue;
+                    fieldRanges.add(r);
+                    group = group == null ? r : group.union(r);
+                } else if (child instanceof PsiWhiteSpace || child instanceof PsiComment
+                        || child instanceof PsiModifierList) {
+                    // keep group open
+                } else if (child instanceof PsiMethod || child instanceof PsiClass
+                        || child instanceof PsiClassInitializer) {
+                    flushWideFieldGroup(group, fieldRanges, editor, out, indented);
+                    group = null;
+                    fieldRanges = new ArrayList<>();
                 }
             }
+            flushWideFieldGroup(group, fieldRanges, editor, out, indented);
         } else {
             // ── original group mode ───────────────────────────────────────────
             TextRange group = null;
@@ -333,6 +435,36 @@ public final class JavaStructureHighlighterService implements Disposable {
                 }
             }
             flushFieldGroup(group, editor, out, indented);
+        }
+    }
+
+    /**
+     * Renders the full-group background as one solid block, then overlays a
+     * 2 px divider line at the top of every field boundary after the first.
+     * Result: one continuous coloured band with subtle internal separators.
+     */
+    private static void flushWideFieldGroup(@Nullable TextRange group,
+                                            @NotNull List<TextRange> fieldRanges,
+                                            @NotNull Editor editor,
+                                            @NotNull List<RangeHighlighter> out,
+                                            boolean indented) {
+        if (group == null || group.isEmpty() || fieldRanges.isEmpty()) return;
+        // 1 – solid background for the entire group
+        addLineBlock(editor, group, JavaStructureColors.FIELD_GROUP_COLOR,
+                JavaStructureColors.FIELD_GROUP_ALPHA, out, 0, indented);
+        // 2 – thin divider on the first line of each field except the first
+        Document doc = editor.getDocument();
+        MarkupModel mm = editor.getMarkupModel();
+        for (int i = 1; i < fieldRanges.size(); i++) {
+            int lineNo  = doc.getLineNumber(fieldRanges.get(i).getStartOffset());
+            int ls      = doc.getLineStartOffset(lineNo);
+            int le      = Math.max(ls + 1, doc.getLineEndOffset(lineNo));
+            RangeHighlighter h = mm.addRangeHighlighter(
+                    ls, le,
+                    HighlighterLayer.ADDITIONAL_SYNTAX + 1,
+                    null, HighlighterTargetArea.LINES_IN_RANGE);
+            h.setCustomRenderer(new FieldDividerRenderer(indented));
+            out.add(h);
         }
     }
 
@@ -406,7 +538,53 @@ public final class JavaStructureHighlighterService implements Disposable {
         out.add(h);
     }
 
-    // ── renderer ──────────────────────────────────────────────────────────────
+    // ── renderers ─────────────────────────────────────────────────────────────
+
+    /**
+     * Draws a 2 px horizontal divider line at the very top of one line.
+     * Used by wider-field-spacing mode to separate fields within a continuous block.
+     */
+    private static final class FieldDividerRenderer implements CustomHighlighterRenderer {
+        private final boolean indented;
+
+        FieldDividerRenderer(boolean indented) { this.indented = indented; }
+
+        @Override
+        public void paint(@NotNull Editor editor, @NotNull RangeHighlighter hl,
+                          @NotNull Graphics g) {
+            Document doc = editor.getDocument();
+            int offset = hl.getStartOffset();
+            if (offset >= doc.getTextLength()) return;
+            int line  = doc.getLineNumber(offset);
+            int y     = editor.logicalPositionToXY(new LogicalPosition(line, 0)).y;
+            int width = editor.getContentComponent().getWidth();
+
+            int xStart = 0;
+            if (indented) {
+                CharSequence chars = doc.getCharsSequence();
+                int lineStart = doc.getLineStartOffset(line);
+                int lineEnd   = doc.getLineEndOffset(line);
+                int col = 0;
+                for (int ci = lineStart; ci < lineEnd; ci++) {
+                    char c = chars.charAt(ci);
+                    if (c != ' ' && c != '\t') break;
+                    col++;
+                }
+                xStart = editor.logicalPositionToXY(new LogicalPosition(line, col)).x;
+            }
+
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                // slightly-darkened field colour at medium opacity → subtle rule
+                Color divColor = JavaStructureColors.FIELD_GROUP_COLOR.darker();
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.55f));
+                g2.setColor(divColor);
+                g2.fillRect(xStart, y, width - xStart, 2);
+            } finally {
+                g2.dispose();
+            }
+        }
+    }
 
     /**
      * Paints a semi-transparent colour band.
@@ -447,6 +625,13 @@ public final class JavaStructureHighlighterService implements Disposable {
             int lh        = editor.getLineHeight();
             int width     = editor.getContentComponent().getWidth();
 
+            // Selection – skip lines that have selected text so the native
+            // selection highlight remains clearly visible.
+            SelectionModel sel    = editor.getSelectionModel();
+            boolean hasSelection  = sel.hasSelection();
+            int selStart          = hasSelection ? sel.getSelectionStart() : -1;
+            int selEnd            = hasSelection ? sel.getSelectionEnd()   : -1;
+
             // Determine the x origin for indented-box mode.
             int xStart = 0;
             if (indented) {
@@ -468,6 +653,12 @@ public final class JavaStructureHighlighterService implements Disposable {
                 g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
                 g2.setColor(color);
                 for (int line = startLine; line <= endLine; line++) {
+                    // Don't paint over lines that intersect the active selection
+                    if (hasSelection) {
+                        int ls = doc.getLineStartOffset(line);
+                        int le = doc.getLineEndOffset(line);
+                        if (selStart < le && selEnd > ls) continue;
+                    }
                     int y = editor.logicalPositionToXY(new LogicalPosition(line, 0)).y;
                     g2.fillRect(xStart, y + lineInset, width - xStart, paintH);
                 }
@@ -487,6 +678,7 @@ public final class JavaStructureHighlighterService implements Disposable {
             ex.clear();
             editor.putUserData(HIGHLIGHTERS_KEY, null);
         }
+        clearCFFocusHighlights(editor);
         repaint(editor);
     }
 
