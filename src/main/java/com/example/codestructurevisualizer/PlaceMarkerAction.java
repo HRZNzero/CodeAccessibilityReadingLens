@@ -12,11 +12,11 @@ import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Toggles a marker on the current caret line (Ctrl+Alt+M).
+ * Toggles a marker on the current caret line (Ctrl+Alt+Shift+N).
  *
  * Markers are shown as a 3 px orange stripe on the left gutter and as an
  * orange stripe in the scrollbar.  Use Ctrl+Alt+Down / Up to navigate
- * between them, and Ctrl+Alt+Shift+H to enable "Marker Focus Mode" which
+ * between them, and Ctrl+Alt+Shift+Z to enable "Marker Focus Mode" which
  * dims and folds all non-marked sections.
  */
 public final class PlaceMarkerAction extends AnAction implements DumbAware {

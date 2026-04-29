@@ -97,15 +97,6 @@
         </action>
 
         <!-- ── marker system ─────────────────────────────────────────────── -->
-        <!-- Strip Ctrl+Alt+M from the built-in Extract Method action so our
-             marker toggle can claim it.  Extract Method is still reachable via
-             the Refactor menu or Find Action (Ctrl+Shift+A). -->
-        <action id="ExtractMethod" overrides="true"
-                class="com.intellij.refactoring.actions.ExtractMethodAction"
-                text="Extract Method...">
-            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt M" remove="true"/>
-        </action>
-
         <action id="CodeStructureVisualizer.PlaceMarker"
                 class="com.example.codestructurevisualizer.PlaceMarkerAction"
                 text="Toggle Line Marker"
