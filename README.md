@@ -5,7 +5,11 @@ A minimal IntelliJ IDEA plugin that adds subtle background grouping in Java file
 - class fields are grouped with a soft field background
 - each method/constructor gets its own soft method background
 
-It is designed to make large Java files easier to visually scan without changing code, formatting, folding, or inspections.
+All background overlays are semi-transparent (~75–80 % opacity) so the editor
+background and syntax colours remain visible underneath.
+
+It is designed to make large Java files easier to visually scan without changing
+code, formatting, folding, or inspections.
 
 See `INSTALL.md` before building.
 
@@ -14,46 +18,42 @@ See `INSTALL.md` before building.
 
 | Shortcut | Action |
 |---|---|
-| `Ctrl+Alt+Shift+B` | Toggle structure overlay on/off |
+| `Ctrl+Alt+Shift+B` | Toggle the visual overlay on / off |
 | `Ctrl+Alt+Shift+G` | Toggle nested bracket-level colouring |
-| `Ctrl+Alt+Shift+I` | Toggle **Inspection Mode** |
-| `Ctrl+Alt+Shift+W` | Toggle **camelCase / snake_case word-spacing** |
+| `Ctrl+Alt+Shift+D` | Toggle **Focus / Dim mode** – grays out all code except the block the cursor is in |
+| `Ctrl+Alt+Shift+W` | Toggle camelCase / snake_case identifier word-spacing |
 
-All actions are also available under **Tools** in the menu bar.
+All actions are also available under **Tools** in the main menu.
 
 
 ## Nested bracket-level colouring
 
-When enabled, nested code blocks inside methods use these background colours:
+Press `Ctrl+Alt+Shift+G` to turn on per-level colouring inside methods.
 
-| Level | Colour |
-|---|---|
-| 1 (method top) | `#34393b` |
-| 2 | `#32383b` |
-| 3 | `#363f42` |
-| 4 | `#384347` |
-| 5+ | `#485a61` |
+Each nesting level gets its own semi-transparent tint (applied with
+`AlphaComposite` so they stack naturally without hiding the text):
 
-
-## Inspection Mode (`Ctrl+Alt+Shift+I`)
-
-Dims all code in the current file **except** the bracket or method body the
-cursor is currently inside.  The active snippet is shown with a slightly
-brighter background; everything else is covered by a near-black overlay.
-
-Moving the cursor to a different bracket or method instantly updates which
-region is highlighted.  Press the shortcut again to turn the mode off.
+| Level | Colour | Alpha |
+|---|---|---|
+| 1 – method body | `#30363 8` | 75 % |
+| 2 – first nested block | `#2a353d` | 55 % |
+| 3 | `#2c3b44` | 50 % |
+| 4 | `#2e404b` | 45 % |
+| 5+ | `#364e58` | 40 % |
 
 
-## camelCase / snake_case word-spacing (`Ctrl+Alt+Shift+W`)
+## Focus / Dim mode
 
-Inserts a small invisible gap (4 px) at every word boundary inside method
-names, field names, and class names so that long identifiers are easier to
-read at a glance.
+Press `Ctrl+Alt+Shift+D` to enter focus mode.  All code outside the block
+the cursor is currently inside is dimmed with a near-black overlay (`#181a1b`,
+90 % opacity).  Moving the caret instantly updates which block is highlighted.
+Press the shortcut again to return to normal view.
 
-- **camelCase** – gap before each uppercase letter that follows a lowercase
-  letter, e.g. `generatePlayerData` renders as `generate · Player · Data`.
-- **snake_case** – gap after each `_` separator, e.g. `generate_player_data`
-  renders as `generate_ · player_ · data`.
 
-The spacing is purely visual and does not modify any source file.
+## CamelCase / snake_case word-spacing
+
+Press `Ctrl+Alt+Shift+W` to toggle. A small invisible 4 px inlay gap is
+inserted at every word boundary inside method names, field names, and class
+names — no source code is ever modified.
+E.g. `generatePlayerData` will render with a tiny extra space before *Player*
+and before *Data*.

@@ -40,9 +40,9 @@
 
         <action id="CodeStructureVisualizer.ToggleInspectionMode"
                 class="com.example.codestructurevisualizer.ToggleInspectionModeAction"
-                text="Toggle Inspection Mode"
+                text="Toggle Focus Mode (Dim)"
                 description="Dim all code except the bracket / method the cursor is currently in">
-            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift I"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift D"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
 

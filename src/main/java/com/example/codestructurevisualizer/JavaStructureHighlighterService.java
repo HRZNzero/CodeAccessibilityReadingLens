@@ -6,6 +6,8 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.LogicalPosition;
+import com.intellij.openapi.editor.markup.CustomHighlighterRenderer;
 import com.intellij.openapi.editor.markup.HighlighterLayer;
 import com.intellij.openapi.editor.markup.HighlighterTargetArea;
 import com.intellij.openapi.editor.markup.MarkupModel;
@@ -34,6 +36,10 @@ import com.intellij.util.Alarm;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.awt.AlphaComposite;
+import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -213,12 +219,16 @@ public final class JavaStructureHighlighterService implements Disposable {
         if (docLen > 0) {
             // Dim overlay over the whole file
             addLineBlockAtLayer(editor, new TextRange(0, docLen),
-                    JavaStructureColors.INSPECTION_DIM, hl, HighlighterLayer.LAST);
+                    JavaStructureColors.INSPECTION_DIM_COLOR,
+                    JavaStructureColors.INSPECTION_DIM_ALPHA,
+                    hl, HighlighterLayer.LAST);
 
             // Bright overlay over active range, drawn above the dim
             if (activeRange != null) {
                 addLineBlockAtLayer(editor, activeRange,
-                        JavaStructureColors.INSPECTION_ACTIVE, hl, HighlighterLayer.LAST + 100);
+                        JavaStructureColors.INSPECTION_ACTIVE_COLOR,
+                        JavaStructureColors.INSPECTION_ACTIVE_ALPHA,
+                        hl, HighlighterLayer.LAST + 100);
             }
         }
 
@@ -255,7 +265,7 @@ public final class JavaStructureHighlighterService implements Disposable {
         }
     }
 
-    // ── method / field annotation helpers (unchanged logic) ───────────────────
+    // ── method / field annotation helpers ─────────────────────────────────────
 
     private static void annotateMethods(
             @NotNull PsiClass psiClass, @NotNull Editor editor,
@@ -263,7 +273,10 @@ public final class JavaStructureHighlighterService implements Disposable {
         for (PsiMethod method : psiClass.getMethods()) {
             TextRange range = method.getTextRange();
             if (range == null || range.isEmpty()) continue;
-            addLineBlock(editor, range, JavaStructureColors.methodLevel(1), created, 1);
+            addLineBlock(editor, range,
+                    JavaStructureColors.methodLevelColor(1),
+                    JavaStructureColors.methodLevelAlpha(1),
+                    created, 1);
             if (nested) annotateNestedCodeBlocks(method, editor, created);
         }
     }
@@ -279,7 +292,10 @@ public final class JavaStructureHighlighterService implements Disposable {
                     TextRange r = block.getTextRange();
                     if (r != null && !r.isEmpty()) {
                         int level = calculateMethodBlockLevel(block, body);
-                        addLineBlock(editor, r, JavaStructureColors.methodLevel(level), created, level);
+                        addLineBlock(editor, r,
+                                JavaStructureColors.methodLevelColor(level),
+                                JavaStructureColors.methodLevelAlpha(level),
+                                created, level);
                     }
                 }
                 super.visitCodeBlock(block);
@@ -323,22 +339,25 @@ public final class JavaStructureHighlighterService implements Disposable {
     private static void flushFieldGroup(@Nullable TextRange range, @NotNull Editor editor,
                                         @NotNull List<RangeHighlighter> created) {
         if (range != null && !range.isEmpty())
-            addLineBlock(editor, range, JavaStructureColors.FIELD_GROUP, created, 0);
+            addLineBlock(editor, range,
+                    JavaStructureColors.FIELD_GROUP_COLOR,
+                    JavaStructureColors.FIELD_GROUP_ALPHA,
+                    created, 0);
     }
 
     // ── low-level markup helpers ──────────────────────────────────────────────
 
     private static void addLineBlock(
             @NotNull Editor editor, @Nullable TextRange range,
-            @NotNull com.intellij.openapi.editor.markup.TextAttributes attrs,
+            @NotNull Color color, float alpha,
             @NotNull List<RangeHighlighter> created, int nestingLevel) {
-        addLineBlockAtLayer(editor, range, attrs, created,
+        addLineBlockAtLayer(editor, range, color, alpha, created,
                 HighlighterLayer.ADDITIONAL_SYNTAX + Math.max(0, nestingLevel));
     }
 
     private static void addLineBlockAtLayer(
             @NotNull Editor editor, @Nullable TextRange range,
-            @NotNull com.intellij.openapi.editor.markup.TextAttributes attrs,
+            @NotNull Color color, float alpha,
             @NotNull List<RangeHighlighter> created, int layer) {
         if (range == null || range.isEmpty()) return;
 
@@ -356,11 +375,62 @@ public final class JavaStructureHighlighterService implements Disposable {
 
         MarkupModel mm = editor.getMarkupModel();
         RangeHighlighter h = mm.addRangeHighlighter(
-                startOffset, endOffset, layer, attrs, HighlighterTargetArea.LINES_IN_RANGE);
+                startOffset, endOffset, layer, null, HighlighterTargetArea.LINES_IN_RANGE);
         h.setGreedyToLeft(true);
         h.setGreedyToRight(true);
+        h.setCustomRenderer(new AlphaBackgroundRenderer(color, alpha));
         created.add(h);
     }
+
+    // ── alpha-aware background renderer ──────────────────────────────────────
+
+    /**
+     * Paints a solid colour at the given opacity across every line covered by
+     * its parent {@link RangeHighlighter}.  Using AlphaComposite means the
+     * actual editor background and any lower-layer highlights show through,
+     * giving the "tinted glass" look instead of a fully opaque box.
+     */
+    private static final class AlphaBackgroundRenderer implements CustomHighlighterRenderer {
+        private final Color color;
+        private final float alpha;
+
+        AlphaBackgroundRenderer(@NotNull Color color, float alpha) {
+            this.color = color;
+            this.alpha = alpha;
+        }
+
+        @Override
+        public void paint(@NotNull Editor editor,
+                          @NotNull RangeHighlighter highlighter,
+                          @NotNull Graphics g) {
+            Document doc = editor.getDocument();
+            int docLen = doc.getTextLength();
+            if (docLen == 0) return;
+
+            int startOffset = highlighter.getStartOffset();
+            int endOffset   = highlighter.getEndOffset();
+            if (startOffset >= endOffset) return;
+
+            int startLine = doc.getLineNumber(startOffset);
+            int endLine   = doc.getLineNumber(Math.min(endOffset, docLen - 1));
+            int lineHeight = editor.getLineHeight();
+            int width = editor.getContentComponent().getWidth();
+
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+                g2.setColor(color);
+                for (int line = startLine; line <= endLine; line++) {
+                    int y = editor.logicalPositionToXY(new LogicalPosition(line, 0)).y;
+                    g2.fillRect(0, y, width, lineHeight);
+                }
+            } finally {
+                g2.dispose();
+            }
+        }
+    }
+
+    // ── editor helpers ────────────────────────────────────────────────────────
 
     private static void clearEditor(@NotNull Editor editor) {
         List<RangeHighlighter> existing = editor.getUserData(HIGHLIGHTERS_KEY);
