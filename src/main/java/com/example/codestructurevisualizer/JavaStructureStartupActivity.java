@@ -20,6 +20,8 @@ public final class JavaStructureStartupActivity implements StartupActivity.DumbA
                 project.getService(JavaStructureHighlighterService.class);
         CamelCaseSpacingService spacingService =
                 project.getService(CamelCaseSpacingService.class);
+        SyntaxEmphasisService emphasisService =
+                project.getService(SyntaxEmphasisService.class);
 
         // ── file-open / selection-change listener ────────────────────────────
         project.getMessageBus().connect(service).subscribe(
@@ -31,6 +33,7 @@ public final class JavaStructureStartupActivity implements StartupActivity.DumbA
                             @NotNull VirtualFile file) {
                         service.scheduleRefresh(file);
                         spacingService.scheduleRefresh(file);
+                        emphasisService.scheduleRefresh(file);
                     }
 
                     @Override
@@ -38,6 +41,7 @@ public final class JavaStructureStartupActivity implements StartupActivity.DumbA
                             @NotNull com.intellij.openapi.fileEditor.FileEditorManagerEvent event) {
                         service.scheduleRefresh(event.getNewFile());
                         spacingService.scheduleRefresh(event.getNewFile());
+                        emphasisService.scheduleRefresh(event.getNewFile());
                     }
                 }
         );
@@ -51,6 +55,7 @@ public final class JavaStructureStartupActivity implements StartupActivity.DumbA
                                 FileDocumentManager.getInstance().getFile(event.getDocument());
                         service.scheduleRefresh(file);
                         spacingService.scheduleRefresh(file);
+                        emphasisService.scheduleRefresh(file);
                     }
                 }, service);
 
@@ -71,5 +76,6 @@ public final class JavaStructureStartupActivity implements StartupActivity.DumbA
 
         service.scheduleRefreshAll();
         spacingService.scheduleRefreshAll();
+        emphasisService.scheduleRefreshAll();
     }
 }

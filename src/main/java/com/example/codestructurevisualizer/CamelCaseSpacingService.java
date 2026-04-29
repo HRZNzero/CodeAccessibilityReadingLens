@@ -8,6 +8,10 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.EditorCustomElementRenderer;
 import com.intellij.openapi.editor.Inlay;
 import com.intellij.openapi.editor.InlayModel;
+import com.intellij.openapi.editor.markup.HighlighterLayer;
+import com.intellij.openapi.editor.markup.HighlighterTargetArea;
+import com.intellij.openapi.editor.markup.MarkupModel;
+import com.intellij.openapi.editor.markup.RangeHighlighter;
 import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.fileEditor.FileEditorManager;
@@ -28,23 +32,20 @@ import com.intellij.util.Alarm;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Inserts invisible inline inlays at camelCase / snake_case word boundaries
- * inside method names, field names, and class names so that the editor
- * renders a small extra gap at each word transition.
+ * Inserts invisible inline inlays at camelCase / snake_case word boundaries inside
+ * method names, field names, and class names so the editor renders a small extra gap
+ * at each word transition.
  *
- * <p>camelCase: extra gap placed just before every uppercase letter that
- * follows a lowercase letter  →  {@code generatePlayerData} looks like
- * {@code generate · Player · Data}.</p>
- *
- * <p>snake_case: extra gap placed just after every {@code _} separator
- * →  {@code generate_player_data} looks like
- * {@code generate_ · player_ · data}.</p>
+ * <p>Additionally, the first character of each new word (right after the gap) is made
+ * slightly <b>bold</b> via a {@link RangeHighlighter} with {@link Font#BOLD}, so the
+ * word boundary is also subtly emphasised in weight without changing any colours.</p>
  */
 @Service(Service.Level.PROJECT)
 public final class CamelCaseSpacingService implements Disposable {
@@ -52,8 +53,15 @@ public final class CamelCaseSpacingService implements Disposable {
     /** Extra horizontal space in pixels inserted at each word boundary. */
     private static final int GAP_PX = 4;
 
-    private static final Key<List<Inlay<?>>> INLAYS_KEY =
-            Key.create("code.structure.camelcase.inlays");
+    /**
+     * Layer for the bold highlighters.  Must be above
+     * {@code HighlighterLayer.ADDITIONAL_SYNTAX} so the bold flag is OR-ed in
+     * after IntelliJ's own syntax attributes are applied.
+     */
+    private static final int BOLD_LAYER = HighlighterLayer.ADDITIONAL_SYNTAX + 100;
+
+    private static final Key<List<Inlay<?>>>          INLAYS_KEY = Key.create("code.structure.camelcase.inlays");
+    private static final Key<List<RangeHighlighter>>  BOLD_KEY   = Key.create("code.structure.camelcase.bold");
 
     private final Project project;
     private final Alarm alarm;
@@ -119,33 +127,42 @@ public final class CamelCaseSpacingService implements Disposable {
         clearEditor(editor);
         if (!enabled) return;
 
-        InlayModel inlayModel = editor.getInlayModel();
-        List<Inlay<?>> created = new ArrayList<>();
+        InlayModel         inlayModel = editor.getInlayModel();
+        MarkupModel        markupModel = editor.getMarkupModel();
+        List<Inlay<?>>         createdInlays = new ArrayList<>();
+        List<RangeHighlighter> createdBolds  = new ArrayList<>();
 
         javaFile.accept(new JavaRecursiveElementWalkingVisitor() {
             @Override public void visitMethod(@NotNull PsiMethod method) {
                 super.visitMethod(method);
                 PsiIdentifier id = method.getNameIdentifier();
-                if (id != null) addBoundaryInlays(inlayModel, id, created);
+                if (id != null) {
+                    addBoundaryInlays(inlayModel, id, createdInlays);
+                    addBoldBoundaryHighlighters(markupModel, id, createdBolds);
+                }
             }
             @Override public void visitField(@NotNull PsiField field) {
                 super.visitField(field);
-                addBoundaryInlays(inlayModel, field.getNameIdentifier(), created);
+                PsiIdentifier id = field.getNameIdentifier();
+                addBoundaryInlays(inlayModel, id, createdInlays);
+                addBoldBoundaryHighlighters(markupModel, id, createdBolds);
             }
             @Override public void visitClass(@NotNull PsiClass aClass) {
                 super.visitClass(aClass);
                 PsiIdentifier id = aClass.getNameIdentifier();
-                if (id != null) addBoundaryInlays(inlayModel, id, created);
+                if (id != null) {
+                    addBoundaryInlays(inlayModel, id, createdInlays);
+                    addBoldBoundaryHighlighters(markupModel, id, createdBolds);
+                }
             }
         });
 
-        editor.putUserData(INLAYS_KEY, created);
+        editor.putUserData(INLAYS_KEY, createdInlays);
+        editor.putUserData(BOLD_KEY,   createdBolds);
     }
 
-    /**
-     * Scans the name {@code id} for camelCase and snake_case boundaries and
-     * inserts a narrow invisible inlay at each one.
-     */
+    // ── boundary detection: inlay gaps ────────────────────────────────────────
+
     private static void addBoundaryInlays(
             @NotNull InlayModel inlayModel,
             @NotNull PsiIdentifier id,
@@ -153,34 +170,76 @@ public final class CamelCaseSpacingService implements Disposable {
 
         String name = id.getText();
         if (name == null || name.length() < 2) return;
-
         int startOffset = id.getTextRange().getStartOffset();
 
         for (int i = 1; i < name.length(); i++) {
             char prev = name.charAt(i - 1);
             char curr = name.charAt(i);
-
             boolean camelBoundary = Character.isLowerCase(prev) && Character.isUpperCase(curr);
-            // snake_case: insert gap right after the '_' (position i) when prev=='_'
             boolean snakeBoundary = prev == '_' && curr != '_';
-
             if (camelBoundary || snakeBoundary) {
                 int offset = startOffset + i;
                 Inlay<SpaceRenderer> inlay = inlayModel.addInlineElement(
-                        offset, /*relatesToPrecedingText=*/ false, new SpaceRenderer());
+                        offset, false, new SpaceRenderer());
                 if (inlay != null) collected.add(inlay);
             }
         }
     }
 
-    private static void clearEditor(@NotNull Editor editor) {
-        List<Inlay<?>> existing = editor.getUserData(INLAYS_KEY);
-        if (existing != null) {
-            for (Inlay<?> inlay : existing) {
-                if (inlay.isValid()) Disposer.dispose(inlay);
+    // ── boundary detection: bold markers ─────────────────────────────────────
+
+    /**
+     * At every word boundary found in {@code id}, places a one-character wide
+     * {@link RangeHighlighter} with {@code FontType = Font.BOLD} on the
+     * <em>first character of the new word</em>.  The null foreground means
+     * IntelliJ will inherit the existing syntax colour while OR-ing in bold.
+     */
+    private static void addBoldBoundaryHighlighters(
+            @NotNull MarkupModel markupModel,
+            @Nullable PsiIdentifier id,
+            @NotNull List<RangeHighlighter> collected) {
+
+        if (id == null) return;
+        String name = id.getText();
+        if (name == null || name.length() < 2) return;
+        int startOffset = id.getTextRange().getStartOffset();
+
+        // Bold attrs: null foreground → inherit syntax colour; BOLD OR-ed in.
+        TextAttributes boldAttrs = new TextAttributes(null, null, null, null, Font.BOLD);
+
+        for (int i = 1; i < name.length(); i++) {
+            char prev = name.charAt(i - 1);
+            char curr = name.charAt(i);
+            boolean camelBoundary = Character.isLowerCase(prev) && Character.isUpperCase(curr);
+            boolean snakeBoundary = prev == '_' && curr != '_';
+            if (camelBoundary || snakeBoundary) {
+                int charOffset = startOffset + i;
+                RangeHighlighter h = markupModel.addRangeHighlighter(
+                        charOffset, charOffset + 1,
+                        BOLD_LAYER, boldAttrs,
+                        HighlighterTargetArea.EXACT_RANGE);
+                collected.add(h);
             }
-            existing.clear();
+        }
+    }
+
+    // ── editor cleanup ────────────────────────────────────────────────────────
+
+    private static void clearEditor(@NotNull Editor editor) {
+        // remove gap inlays
+        List<Inlay<?>> inlays = editor.getUserData(INLAYS_KEY);
+        if (inlays != null) {
+            for (Inlay<?> inlay : inlays) if (inlay.isValid()) Disposer.dispose(inlay);
+            inlays.clear();
             editor.putUserData(INLAYS_KEY, null);
+        }
+        // remove bold highlighters
+        List<RangeHighlighter> bolds = editor.getUserData(BOLD_KEY);
+        if (bolds != null) {
+            MarkupModel mm = editor.getMarkupModel();
+            for (RangeHighlighter h : bolds) if (h.isValid()) mm.removeHighlighter(h);
+            bolds.clear();
+            editor.putUserData(BOLD_KEY, null);
         }
     }
 
@@ -196,23 +255,11 @@ public final class CamelCaseSpacingService implements Disposable {
 
     // ── inlay renderer ────────────────────────────────────────────────────────
 
-    /**
-     * Zero-height, {@value GAP_PX}-pixel-wide transparent renderer that just
-     * pushes characters apart at word boundaries.
-     */
+    /** {@value GAP_PX}-pixel-wide transparent renderer: only the width matters. */
     private static final class SpaceRenderer implements EditorCustomElementRenderer {
-
-        @Override
-        public int calcWidthInPixels(@NotNull Inlay inlay) {
-            return GAP_PX;
-        }
-
-        @Override
-        public void paint(@NotNull Inlay inlay, @NotNull Graphics g,
-                          @NotNull Rectangle targetRegion,
-                          @NotNull TextAttributes textAttributes) {
-            // Intentionally empty – only the width matters.
-        }
+        @Override public int calcWidthInPixels(@NotNull Inlay inlay) { return GAP_PX; }
+        @Override public void paint(@NotNull Inlay inlay, @NotNull Graphics g,
+                                    @NotNull Rectangle targetRegion,
+                                    @NotNull TextAttributes textAttributes) { /* no-op */ }
     }
 }
-

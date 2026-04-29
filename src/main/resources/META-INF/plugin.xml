@@ -19,6 +19,9 @@
         <postStartupActivity implementation="com.example.codestructurevisualizer.JavaStructureStartupActivity"/>
         <notificationGroup id="Code Structure Visualizer" displayType="BALLOON"/>
         <projectService serviceImplementation="com.example.codestructurevisualizer.CamelCaseSpacingService"/>
+        <!-- Syntax emphasis: settings (PersistentStateComponent) + runtime service -->
+        <projectService serviceImplementation="com.example.codestructurevisualizer.SyntaxEmphasisSettings"/>
+        <projectService serviceImplementation="com.example.codestructurevisualizer.SyntaxEmphasisService"/>
     </extensions>
 
     <actions>
@@ -51,6 +54,14 @@
                 text="Toggle Identifier Word-Spacing"
                 description="Add visual spacing between words in camelCase and snake_case identifier names">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift W"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
+        <action id="CodeStructureVisualizer.SyntaxEmphasisConfig"
+                class="com.example.codestructurevisualizer.ToggleSyntaxEmphasisAction"
+                text="Configure Syntax Emphasis (Bold / Colour)…"
+                description="Toggle bold emphasis and custom colours for individual Java syntax tokens">
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift E"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>
