@@ -10,8 +10,14 @@ final class JavaStructureColors {
     private JavaStructureColors() {
     }
 
-    static final TextAttributes FIELD_GROUP = createBackground(new Color(0x45, 0x57, 0x6b));
+    static final TextAttributes FIELD_GROUP  = createBackground(new Color(0x45, 0x57, 0x6b));
     static final TextAttributes METHOD_GROUP = createBackground(new Color(0x34, 0x39, 0x3b));
+
+    // Inspection-mode colours
+    /** All lines outside the active block are covered by this dark dim overlay. */
+    static final TextAttributes INSPECTION_DIM    = createBackground(new Color(0x18, 0x1a, 0x1b));
+    /** The current code block / method is shown with this slightly-brighter background. */
+    static final TextAttributes INSPECTION_ACTIVE = createBackground(new Color(0x2e, 0x38, 0x3d));
 
     private static final TextAttributes[] METHOD_LEVELS = new TextAttributes[]{
             createBackground(new Color(0x34, 0x39, 0x3b)), // level 1: method main level

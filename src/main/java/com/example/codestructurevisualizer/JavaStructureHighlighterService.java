@@ -39,21 +39,25 @@ import java.util.List;
 
 @Service(Service.Level.PROJECT)
 public final class JavaStructureHighlighterService implements Disposable {
-    private static final Key<List<RangeHighlighter>> HIGHLIGHTERS_KEY = Key.create("code.structure.visualizer.highlighters");
+    private static final Key<List<RangeHighlighter>> HIGHLIGHTERS_KEY =
+            Key.create("code.structure.visualizer.highlighters");
+    private static final Key<List<RangeHighlighter>> INSPECTION_HIGHLIGHTERS_KEY =
+            Key.create("code.structure.visualizer.inspection.highlighters");
 
     private final Project project;
     private final Alarm refreshAlarm;
     private boolean enabled = true;
     private boolean nestedSubsectionsEnabled = false;
+    private boolean inspectionModeEnabled = false;
 
     public JavaStructureHighlighterService(@NotNull Project project) {
         this.project = project;
         this.refreshAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD, this);
     }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
+    // ── normal overlay ────────────────────────────────────────────────────────
+
+    public boolean isEnabled() { return enabled; }
 
     public boolean toggleEnabled() {
         enabled = !enabled;
@@ -62,9 +66,9 @@ public final class JavaStructureHighlighterService implements Disposable {
         return enabled;
     }
 
-    public boolean isNestedSubsectionsEnabled() {
-        return nestedSubsectionsEnabled;
-    }
+    // ── nested subsections ────────────────────────────────────────────────────
+
+    public boolean isNestedSubsectionsEnabled() { return nestedSubsectionsEnabled; }
 
     public boolean toggleNestedSubsectionsEnabled() {
         nestedSubsectionsEnabled = !nestedSubsectionsEnabled;
@@ -73,80 +77,99 @@ public final class JavaStructureHighlighterService implements Disposable {
         return nestedSubsectionsEnabled;
     }
 
-    public void scheduleRefreshAll() {
-        scheduleRefresh(null);
+    // ── inspection mode ───────────────────────────────────────────────────────
+
+    public boolean isInspectionModeEnabled() { return inspectionModeEnabled; }
+
+    public boolean toggleInspectionMode() {
+        inspectionModeEnabled = !inspectionModeEnabled;
+        refreshAlarm.cancelAllRequests();
+        refreshAllOpenJavaEditorsNow();
+        return inspectionModeEnabled;
     }
+
+    /**
+     * Called by the caret listener whenever the caret moves while inspection
+     * mode is active.  Runs on the EDT inside a read action.
+     */
+    public void scheduleInspectionRefreshForEditor(@NotNull Editor editor, @NotNull VirtualFile file) {
+        refreshAlarm.cancelAllRequests();
+        refreshAlarm.addRequest(() -> {
+            if (project.isDisposed()) return;
+            Runnable r = () -> {
+                PsiFile psiFile = PsiManager.getInstance(project).findFile(file);
+                if (psiFile instanceof PsiJavaFile javaFile) {
+                    refreshInspectionForEditor(editor, javaFile);
+                }
+            };
+            if (ApplicationManager.getApplication().isReadAccessAllowed()) r.run();
+            else ApplicationManager.getApplication().runReadAction(r);
+        }, 80);
+    }
+
+    // ── scheduling / refresh ──────────────────────────────────────────────────
+
+    public void scheduleRefreshAll() { scheduleRefresh(null); }
 
     public void scheduleRefresh(@Nullable VirtualFile file) {
         refreshAlarm.cancelAllRequests();
         refreshAlarm.addRequest(() -> {
-            if (project.isDisposed()) {
-                return;
-            }
-
-            if (file == null) {
-                refreshAllOpenJavaEditorsNow();
-            } else {
-                refreshFile(file);
-            }
+            if (project.isDisposed()) return;
+            if (file == null) refreshAllOpenJavaEditorsNow();
+            else             refreshFile(file);
         }, 100);
     }
 
     public void refreshAllOpenJavaEditorsNow() {
         Runnable refresh = () -> {
-            FileEditorManager editorManager = FileEditorManager.getInstance(project);
-            for (VirtualFile file : editorManager.getOpenFiles()) {
-                refreshFile(file);
-            }
+            FileEditorManager em = FileEditorManager.getInstance(project);
+            for (VirtualFile file : em.getOpenFiles()) refreshFile(file);
         };
-
-        if (ApplicationManager.getApplication().isReadAccessAllowed()) {
-            refresh.run();
-        } else {
-            ApplicationManager.getApplication().runReadAction(refresh);
-        }
+        if (ApplicationManager.getApplication().isReadAccessAllowed()) refresh.run();
+        else ApplicationManager.getApplication().runReadAction(refresh);
     }
 
     private void clearAllOpenEditors() {
-        FileEditorManager editorManager = FileEditorManager.getInstance(project);
-        for (VirtualFile file : editorManager.getOpenFiles()) {
-            for (FileEditor fileEditor : editorManager.getEditors(file)) {
-                if (fileEditor instanceof TextEditor textEditor) {
-                    clearEditor(textEditor.getEditor());
+        FileEditorManager em = FileEditorManager.getInstance(project);
+        for (VirtualFile file : em.getOpenFiles()) {
+            for (FileEditor fe : em.getEditors(file)) {
+                if (fe instanceof TextEditor te) {
+                    clearEditor(te.getEditor());
+                    clearInspectionHighlights(te.getEditor());
                 }
             }
         }
     }
 
     private void refreshFile(@NotNull VirtualFile file) {
-        FileEditorManager editorManager = FileEditorManager.getInstance(project);
+        FileEditorManager em = FileEditorManager.getInstance(project);
 
         if (file.getFileType() != JavaFileType.INSTANCE) {
-            for (FileEditor fileEditor : editorManager.getEditors(file)) {
-                if (fileEditor instanceof TextEditor textEditor) {
-                    clearEditor(textEditor.getEditor());
+            for (FileEditor fe : em.getEditors(file)) {
+                if (fe instanceof TextEditor te) {
+                    clearEditor(te.getEditor());
+                    clearInspectionHighlights(te.getEditor());
                 }
             }
             return;
         }
 
         if (!enabled) {
-            for (FileEditor fileEditor : editorManager.getEditors(file)) {
-                if (fileEditor instanceof TextEditor textEditor) {
-                    clearEditor(textEditor.getEditor());
+            for (FileEditor fe : em.getEditors(file)) {
+                if (fe instanceof TextEditor te) {
+                    clearEditor(te.getEditor());
+                    clearInspectionHighlights(te.getEditor());
                 }
             }
             return;
         }
 
         PsiFile psiFile = PsiManager.getInstance(project).findFile(file);
-        if (!(psiFile instanceof PsiJavaFile javaFile)) {
-            return;
-        }
+        if (!(psiFile instanceof PsiJavaFile javaFile)) return;
 
-        for (FileEditor fileEditor : editorManager.getEditors(file)) {
-            if (fileEditor instanceof TextEditor textEditor) {
-                refreshEditor(textEditor.getEditor(), javaFile);
+        for (FileEditor fe : em.getEditors(file)) {
+            if (fe instanceof TextEditor te) {
+                refreshEditor(te.getEditor(), javaFile);
             }
         }
     }
@@ -154,62 +177,109 @@ public final class JavaStructureHighlighterService implements Disposable {
     private void refreshEditor(@NotNull Editor editor, @NotNull PsiJavaFile javaFile) {
         clearEditor(editor);
 
-        if (!enabled) {
-            repaint(editor);
-            return;
-        }
+        if (!enabled) { repaint(editor); return; }
 
-        List<RangeHighlighter> createdHighlighters = new ArrayList<>();
+        List<RangeHighlighter> created = new ArrayList<>();
         javaFile.accept(new JavaRecursiveElementWalkingVisitor() {
-            @Override
-            public void visitClass(@NotNull PsiClass aClass) {
+            @Override public void visitClass(@NotNull PsiClass aClass) {
                 super.visitClass(aClass);
-                annotateFieldGroups(aClass, editor, createdHighlighters);
-                annotateMethods(aClass, editor, createdHighlighters, nestedSubsectionsEnabled);
+                annotateFieldGroups(aClass, editor, created);
+                annotateMethods(aClass, editor, created, nestedSubsectionsEnabled);
             }
         });
 
-        editor.putUserData(HIGHLIGHTERS_KEY, createdHighlighters);
+        editor.putUserData(HIGHLIGHTERS_KEY, created);
+
+        // also refresh inspection overlay (uses current caret position)
+        refreshInspectionForEditor(editor, javaFile);
+
         repaint(editor);
     }
 
-    private static void annotateMethods(
-            @NotNull PsiClass psiClass,
-            @NotNull Editor editor,
-            @NotNull List<RangeHighlighter> createdHighlighters,
-            boolean nestedSubsectionsEnabled
-    ) {
-        for (PsiMethod method : psiClass.getMethods()) {
-            TextRange methodRange = method.getTextRange();
-            if (methodRange == null || methodRange.isEmpty()) {
-                continue;
-            }
+    // ── inspection-mode painting ──────────────────────────────────────────────
 
-            addLineBlock(editor, methodRange, JavaStructureColors.methodLevel(1), createdHighlighters, 1);
-            if (nestedSubsectionsEnabled) {
-                annotateNestedCodeBlocks(method, editor, createdHighlighters);
+    private void refreshInspectionForEditor(@NotNull Editor editor, @NotNull PsiJavaFile javaFile) {
+        clearInspectionHighlights(editor);
+        if (!inspectionModeEnabled) return;
+
+        int caretOffset = editor.getCaretModel().getOffset();
+        PsiElement element = javaFile.findElementAt(caretOffset);
+        TextRange activeRange = findActiveRange(element);
+
+        List<RangeHighlighter> hl = new ArrayList<>();
+        Document document = editor.getDocument();
+        int docLen = document.getTextLength();
+
+        if (docLen > 0) {
+            // Dim overlay over the whole file
+            addLineBlockAtLayer(editor, new TextRange(0, docLen),
+                    JavaStructureColors.INSPECTION_DIM, hl, HighlighterLayer.LAST);
+
+            // Bright overlay over active range, drawn above the dim
+            if (activeRange != null) {
+                addLineBlockAtLayer(editor, activeRange,
+                        JavaStructureColors.INSPECTION_ACTIVE, hl, HighlighterLayer.LAST + 100);
             }
+        }
+
+        editor.putUserData(INSPECTION_HIGHLIGHTERS_KEY, hl);
+        repaint(editor);
+    }
+
+    /** Walk up the PSI tree to find the tightest enclosing code snippet. */
+    @Nullable
+    private static TextRange findActiveRange(@Nullable PsiElement element) {
+        if (element == null) return null;
+        PsiElement current = element;
+        while (current != null) {
+            if (current instanceof PsiCodeBlock codeBlock) {
+                PsiElement parent = codeBlock.getParent();
+                if (parent != null) return parent.getTextRange(); // method, if, for, while …
+                return codeBlock.getTextRange();
+            }
+            if (current instanceof PsiMethod) return current.getTextRange();
+            current = current.getParent();
+        }
+        return null;
+    }
+
+    private static void clearInspectionHighlights(@NotNull Editor editor) {
+        List<RangeHighlighter> existing = editor.getUserData(INSPECTION_HIGHLIGHTERS_KEY);
+        if (existing != null) {
+            MarkupModel mm = editor.getMarkupModel();
+            for (RangeHighlighter h : existing) {
+                if (h.isValid()) mm.removeHighlighter(h);
+            }
+            existing.clear();
+            editor.putUserData(INSPECTION_HIGHLIGHTERS_KEY, null);
+        }
+    }
+
+    // ── method / field annotation helpers (unchanged logic) ───────────────────
+
+    private static void annotateMethods(
+            @NotNull PsiClass psiClass, @NotNull Editor editor,
+            @NotNull List<RangeHighlighter> created, boolean nested) {
+        for (PsiMethod method : psiClass.getMethods()) {
+            TextRange range = method.getTextRange();
+            if (range == null || range.isEmpty()) continue;
+            addLineBlock(editor, range, JavaStructureColors.methodLevel(1), created, 1);
+            if (nested) annotateNestedCodeBlocks(method, editor, created);
         }
     }
 
     private static void annotateNestedCodeBlocks(
-            @NotNull PsiMethod method,
-            @NotNull Editor editor,
-            @NotNull List<RangeHighlighter> createdHighlighters
-    ) {
-        PsiCodeBlock methodBody = method.getBody();
-        if (methodBody == null) {
-            return;
-        }
-
-        methodBody.accept(new JavaRecursiveElementWalkingVisitor() {
-            @Override
-            public void visitCodeBlock(@NotNull PsiCodeBlock block) {
-                if (block != methodBody) {
-                    TextRange blockRange = block.getTextRange();
-                    if (blockRange != null && !blockRange.isEmpty()) {
-                        int level = calculateMethodBlockLevel(block, methodBody);
-                        addLineBlock(editor, blockRange, JavaStructureColors.methodLevel(level), createdHighlighters, level);
+            @NotNull PsiMethod method, @NotNull Editor editor,
+            @NotNull List<RangeHighlighter> created) {
+        PsiCodeBlock body = method.getBody();
+        if (body == null) return;
+        body.accept(new JavaRecursiveElementWalkingVisitor() {
+            @Override public void visitCodeBlock(@NotNull PsiCodeBlock block) {
+                if (block != body) {
+                    TextRange r = block.getTextRange();
+                    if (r != null && !r.isEmpty()) {
+                        int level = calculateMethodBlockLevel(block, body);
+                        addLineBlock(editor, r, JavaStructureColors.methodLevel(level), created, level);
                     }
                 }
                 super.visitCodeBlock(block);
@@ -221,104 +291,85 @@ public final class JavaStructureHighlighterService implements Disposable {
         int level = 2;
         PsiElement parent = block.getParent();
         while (parent != null && parent != methodBody) {
-            if (parent instanceof PsiCodeBlock) {
-                level++;
-            }
+            if (parent instanceof PsiCodeBlock) level++;
             parent = parent.getParent();
         }
         return Math.min(level, 5);
     }
 
     private static void annotateFieldGroups(
-            @NotNull PsiClass psiClass,
-            @NotNull Editor editor,
-            @NotNull List<RangeHighlighter> createdHighlighters
-    ) {
+            @NotNull PsiClass psiClass, @NotNull Editor editor,
+            @NotNull List<RangeHighlighter> created) {
         TextRange currentGroup = null;
-
         for (PsiElement child : psiClass.getChildren()) {
             if (child instanceof PsiField) {
-                TextRange fieldRange = child.getTextRange();
-                if (fieldRange == null || fieldRange.isEmpty()) {
-                    continue;
-                }
-                currentGroup = currentGroup == null ? fieldRange : currentGroup.union(fieldRange);
+                TextRange r = child.getTextRange();
+                if (r == null || r.isEmpty()) continue;
+                currentGroup = currentGroup == null ? r : currentGroup.union(r);
             } else if (child instanceof PsiWhiteSpace || child instanceof PsiComment || child instanceof PsiModifierList) {
-                // Keep the current group open across whitespace/comments/modifiers.
+                // keep group open
             } else if (isStructuralClassMember(child)) {
-                flushFieldGroup(currentGroup, editor, createdHighlighters);
+                flushFieldGroup(currentGroup, editor, created);
                 currentGroup = null;
             }
         }
-
-        flushFieldGroup(currentGroup, editor, createdHighlighters);
+        flushFieldGroup(currentGroup, editor, created);
     }
 
     private static boolean isStructuralClassMember(@NotNull PsiElement child) {
         return child instanceof PsiMethod || child instanceof PsiClass || child instanceof PsiClassInitializer;
     }
 
-    private static void flushFieldGroup(
-            @Nullable TextRange range,
-            @NotNull Editor editor,
-            @NotNull List<RangeHighlighter> createdHighlighters
-    ) {
-        if (range != null && !range.isEmpty()) {
-            addLineBlock(editor, range, JavaStructureColors.FIELD_GROUP, createdHighlighters, 0);
-        }
+    private static void flushFieldGroup(@Nullable TextRange range, @NotNull Editor editor,
+                                        @NotNull List<RangeHighlighter> created) {
+        if (range != null && !range.isEmpty())
+            addLineBlock(editor, range, JavaStructureColors.FIELD_GROUP, created, 0);
     }
 
+    // ── low-level markup helpers ──────────────────────────────────────────────
+
     private static void addLineBlock(
-            @NotNull Editor editor,
-            @Nullable TextRange range,
-            @NotNull com.intellij.openapi.editor.markup.TextAttributes textAttributes,
-            @NotNull List<RangeHighlighter> createdHighlighters,
-            int nestingLevel
-    ) {
-        if (range == null || range.isEmpty()) {
-            return;
-        }
+            @NotNull Editor editor, @Nullable TextRange range,
+            @NotNull com.intellij.openapi.editor.markup.TextAttributes attrs,
+            @NotNull List<RangeHighlighter> created, int nestingLevel) {
+        addLineBlockAtLayer(editor, range, attrs, created,
+                HighlighterLayer.ADDITIONAL_SYNTAX + Math.max(0, nestingLevel));
+    }
+
+    private static void addLineBlockAtLayer(
+            @NotNull Editor editor, @Nullable TextRange range,
+            @NotNull com.intellij.openapi.editor.markup.TextAttributes attrs,
+            @NotNull List<RangeHighlighter> created, int layer) {
+        if (range == null || range.isEmpty()) return;
 
         Document document = editor.getDocument();
         int textLength = document.getTextLength();
         int start = Math.max(0, Math.min(range.getStartOffset(), textLength));
-        int end = Math.max(start, Math.min(range.getEndOffset(), textLength));
-        if (start >= textLength && textLength > 0) {
-            start = textLength - 1;
-        }
+        int end   = Math.max(start, Math.min(range.getEndOffset(), textLength));
+        if (start >= textLength && textLength > 0) start = textLength - 1;
 
-        int startLine = document.getLineNumber(start);
-        int endLine = document.getLineNumber(Math.max(end - 1, start));
+        int startLine   = document.getLineNumber(start);
+        int endLine     = document.getLineNumber(Math.max(end - 1, start));
         int startOffset = document.getLineStartOffset(startLine);
-        int endOffset = document.getLineEndOffset(endLine);
+        int endOffset   = document.getLineEndOffset(endLine);
+        if (endOffset <= startOffset) return;
 
-        if (endOffset <= startOffset) {
-            return;
-        }
-
-        MarkupModel markupModel = editor.getMarkupModel();
-        RangeHighlighter highlighter = markupModel.addRangeHighlighter(
-                startOffset,
-                endOffset,
-                HighlighterLayer.ADDITIONAL_SYNTAX + Math.max(0, nestingLevel),
-                textAttributes,
-                HighlighterTargetArea.LINES_IN_RANGE
-        );
-        highlighter.setGreedyToLeft(true);
-        highlighter.setGreedyToRight(true);
-        createdHighlighters.add(highlighter);
+        MarkupModel mm = editor.getMarkupModel();
+        RangeHighlighter h = mm.addRangeHighlighter(
+                startOffset, endOffset, layer, attrs, HighlighterTargetArea.LINES_IN_RANGE);
+        h.setGreedyToLeft(true);
+        h.setGreedyToRight(true);
+        created.add(h);
     }
 
     private static void clearEditor(@NotNull Editor editor) {
-        List<RangeHighlighter> existingHighlighters = editor.getUserData(HIGHLIGHTERS_KEY);
-        if (existingHighlighters != null) {
-            MarkupModel markupModel = editor.getMarkupModel();
-            for (RangeHighlighter highlighter : existingHighlighters) {
-                if (highlighter.isValid()) {
-                    markupModel.removeHighlighter(highlighter);
-                }
+        List<RangeHighlighter> existing = editor.getUserData(HIGHLIGHTERS_KEY);
+        if (existing != null) {
+            MarkupModel mm = editor.getMarkupModel();
+            for (RangeHighlighter h : existing) {
+                if (h.isValid()) mm.removeHighlighter(h);
             }
-            existingHighlighters.clear();
+            existing.clear();
             editor.putUserData(HIGHLIGHTERS_KEY, null);
         }
         repaint(editor);
@@ -330,7 +381,5 @@ public final class JavaStructureHighlighterService implements Disposable {
     }
 
     @Override
-    public void dispose() {
-        clearAllOpenEditors();
-    }
+    public void dispose() { clearAllOpenEditors(); }
 }
