@@ -3,11 +3,10 @@
     <name>Code Structure Visualizer</name>
     <vendor email="support@example.com">Example</vendor>
     <description><![CDATA[
-        Adds subtle colour-coded background groups to Java files:
-        one full-line background block for class fields and one full-line background block for each method.
-        Optional nested bracket-level colouring can show subsections inside methods.
-        Inspection mode dims all code outside the current bracket / method.
-        Optional camelCase / snake_case identifier word-spacing improves readability.
+        Adds subtle colour-coded background groups to Java files.
+        Optional nested bracket-level colouring, focus/dim mode, camelCase word-spacing,
+        indented-box layout, wider field spacing, syntax token emphasis, and
+        a control-flow view that highlights all if/else/switch blocks.
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -19,12 +18,12 @@
         <postStartupActivity implementation="com.example.codestructurevisualizer.JavaStructureStartupActivity"/>
         <notificationGroup id="Code Structure Visualizer" displayType="BALLOON"/>
         <projectService serviceImplementation="com.example.codestructurevisualizer.CamelCaseSpacingService"/>
-        <!-- Syntax emphasis: settings (PersistentStateComponent) + runtime service -->
         <projectService serviceImplementation="com.example.codestructurevisualizer.SyntaxEmphasisSettings"/>
         <projectService serviceImplementation="com.example.codestructurevisualizer.SyntaxEmphasisService"/>
     </extensions>
 
     <actions>
+        <!-- ── core overlay ──────────────────────────────────────────────── -->
         <action id="CodeStructureVisualizer.ToggleOverlay"
                 class="com.example.codestructurevisualizer.ToggleJavaStructureOverlayAction"
                 text="Toggle Code Structure Overlay"
@@ -41,27 +40,57 @@
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
 
+        <!-- ── focus / dim  (was D – conflicted; now F for Focus) ────────── -->
         <action id="CodeStructureVisualizer.ToggleInspectionMode"
                 class="com.example.codestructurevisualizer.ToggleInspectionModeAction"
                 text="Toggle Focus Mode (Dim)"
                 description="Dim all code except the bracket / method the cursor is currently in">
-            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift D"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift F"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
 
+        <!-- ── camelCase word-spacing ─────────────────────────────────────── -->
         <action id="CodeStructureVisualizer.ToggleCamelCaseSpacing"
                 class="com.example.codestructurevisualizer.ToggleCamelCaseSpacingAction"
                 text="Toggle Identifier Word-Spacing"
-                description="Add visual spacing between words in camelCase and snake_case identifier names">
+                description="Add tiny visual gaps + bold at camelCase/snake_case word boundaries">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift W"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
 
+        <!-- ── syntax emphasis config  (was E – conflicted; now Y) ────────── -->
         <action id="CodeStructureVisualizer.SyntaxEmphasisConfig"
                 class="com.example.codestructurevisualizer.ToggleSyntaxEmphasisAction"
                 text="Configure Syntax Emphasis (Bold / Colour)…"
-                description="Toggle bold emphasis and custom colours for individual Java syntax tokens">
-            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift E"/>
+                description="Toggle bold and custom colour for if / ( ) / ? / ; / &quot; / . / { } / [ ] / &lt;&gt;">
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift Y"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
+        <!-- ── indented boxes ─────────────────────────────────────────────── -->
+        <action id="CodeStructureVisualizer.ToggleIndentedBoxes"
+                class="com.example.codestructurevisualizer.ToggleIndentedBoxesAction"
+                text="Toggle Indented Boxes"
+                description="Start each colour band at its block's indentation column (nested-box look)">
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift X"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
+        <!-- ── wider field spacing ───────────────────────────────────────── -->
+        <action id="CodeStructureVisualizer.ToggleWiderFieldSpacing"
+                class="com.example.codestructurevisualizer.ToggleWiderFieldSpacingAction"
+                text="Toggle Wider Field Spacing"
+                description="Add a thin separator gap between consecutive field background rows">
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift L"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
+        <!-- ── control-flow view ─────────────────────────────────────────── -->
+        <action id="CodeStructureVisualizer.ToggleControlFlowMode"
+                class="com.example.codestructurevisualizer.ToggleControlFlowModeAction"
+                text="Toggle Control-Flow View"
+                description="Highlight all if/else/switch blocks in orange; hides level colouring">
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift O"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>
