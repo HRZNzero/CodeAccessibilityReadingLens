@@ -9,7 +9,7 @@ import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Toggles "Marker Focus Mode" (Ctrl+Alt+Shift+0).
+ * Toggles "Marker Focus Mode" (Ctrl+Alt+Shift+Z).
  *
  * When active, all lines that do NOT have a marker placed on them are:
  *   • dimmed with a 62 % dark overlay, AND
@@ -33,7 +33,7 @@ public final class ToggleMarkerFocusAction extends AnAction implements DumbAware
         String message;
         NotificationType type = NotificationType.INFORMATION;
         if (!wasOn && !on) {
-            message = "No markers placed yet — press Ctrl+Alt+Shift+M on a line first";
+            message = "No markers placed yet — press Ctrl+Alt+M on a line first";
             type    = NotificationType.WARNING;
         } else {
             message = on ? "Marker focus mode enabled"

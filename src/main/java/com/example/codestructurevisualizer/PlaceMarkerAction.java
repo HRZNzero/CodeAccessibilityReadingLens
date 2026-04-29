@@ -12,7 +12,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Toggles a marker on the current caret line (Ctrl+Alt+Shift+M).
+ * Toggles a marker on the current caret line (Ctrl+Alt+M).
  *
  * Markers are shown as a 3 px orange stripe on the left gutter and as an
  * orange stripe in the scrollbar.  Use Ctrl+Alt+Down / Up to navigate

@@ -92,7 +92,7 @@
                 class="com.example.codestructurevisualizer.ToggleControlFlowModeAction"
                 text="Toggle Control-Flow View"
                 description="Highlight all if/else/switch blocks in orange; hides level colouring">
-            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift alt C"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift Q"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
 
@@ -101,7 +101,7 @@
                 class="com.example.codestructurevisualizer.PlaceMarkerAction"
                 text="Toggle Line Marker"
                 description="Place or remove a marker on the current line (orange gutter stripe)">
-            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift M"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt M"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
 
@@ -125,7 +125,7 @@
                 class="com.example.codestructurevisualizer.ToggleMarkerFocusAction"
                 text="Toggle Marker Focus Mode"
                 description="Dim and fold all non-marked lines so only marked sections are visible">
-            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift 0"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift Z"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>
