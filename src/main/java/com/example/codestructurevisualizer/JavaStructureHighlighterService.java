@@ -33,7 +33,10 @@ import com.intellij.psi.PsiJavaFile;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiModifierList;
+import com.intellij.psi.PsiSwitchBlock;
 import com.intellij.psi.PsiSwitchExpression;
+import com.intellij.psi.PsiSwitchLabelStatement;
+import com.intellij.psi.PsiSwitchLabeledRuleStatement;
 import com.intellij.psi.PsiSwitchStatement;
 import com.intellij.psi.PsiWhiteSpace;
 import com.intellij.util.Alarm;
@@ -222,6 +225,10 @@ public final class JavaStructureHighlighterService implements Disposable {
 
         editor.putUserData(HIGHLIGHTERS_KEY, created);
         refreshInspectionForEditor(editor, javaFile);
+        // Bug-fix: when CF mode is toggled on while the cursor is already
+        // inside an if/switch/case, the dim layer must be applied right away
+        // (previously it only appeared after the next caret movement).
+        if (cfMode) refreshCFFocusForEditor(editor, javaFile);
         repaint(editor);
     }
 
@@ -292,11 +299,14 @@ public final class JavaStructureHighlighterService implements Disposable {
         PsiElement activeCF = findParentControlFlow(atCaret);
         if (activeCF == null) { repaint(editor); return; }   // not inside any CF block
 
-        TextRange activeRange = activeCF.getTextRange();
+        // For colon-style "case X:" labels the active range spans from the
+        // label up to the next sibling label (or the end of the switch body).
+        TextRange activeRange = computeActiveCFRange(activeCF);
         boolean indented = indentedBoxesEnabled;
         List<RangeHighlighter> hl = new ArrayList<>();
 
-        // Collect all CF-block ranges in the file (mirrors annotateControlFlow)
+        // Collect all CF-block ranges in the file (mirrors annotateControlFlow,
+        // plus per-case ranges so a sibling case dims the others)
         List<TextRange> allRanges = new ArrayList<>();
         javaFile.accept(new JavaRecursiveElementWalkingVisitor() {
             @Override public void visitIfStatement(@NotNull PsiIfStatement s) {
@@ -307,18 +317,23 @@ public final class JavaStructureHighlighterService implements Disposable {
             @Override public void visitSwitchStatement(@NotNull PsiSwitchStatement s) {
                 TextRange r = s.getTextRange();
                 if (r != null && !r.isEmpty()) allRanges.add(r);
+                collectCaseRanges(s, allRanges);
                 super.visitSwitchStatement(s);
             }
             @Override public void visitSwitchExpression(@NotNull PsiSwitchExpression s) {
                 TextRange r = s.getTextRange();
                 if (r != null && !r.isEmpty()) allRanges.add(r);
+                collectCaseRanges(s, allRanges);
                 super.visitSwitchExpression(s);
             }
         });
 
-        // Dim blocks that are NOT the active block and NOT contained inside it
+        // Dim blocks that are NOT the active block, NOT contained inside it,
+        // AND do not contain it.
         for (TextRange r : allRanges) {
-            if (!r.equals(activeRange) && !activeRange.contains(r)) {
+            if (!r.equals(activeRange)
+                    && !activeRange.contains(r)
+                    && !r.contains(activeRange)) {
                 addLineBlockAtLayer(editor, r, new Color(0x10, 0x10, 0x10), 0.22f, hl,
                         HighlighterLayer.ADDITIONAL_SYNTAX + 200, indented, 0);
             }
@@ -328,10 +343,61 @@ public final class JavaStructureHighlighterService implements Disposable {
         repaint(editor);
     }
 
+    /** Collects per-case ranges inside a switch (both colon-style and arrow-style). */
+    private static void collectCaseRanges(@NotNull PsiSwitchBlock sw,
+                                          @NotNull List<TextRange> out) {
+        PsiCodeBlock body = sw.getBody();
+        if (body == null) return;
+        PsiElement[] children = body.getChildren();
+        for (int i = 0; i < children.length; i++) {
+            PsiElement c = children[i];
+            if (c instanceof PsiSwitchLabeledRuleStatement rule) {
+                TextRange r = rule.getTextRange();
+                if (r != null && !r.isEmpty()) out.add(r);
+            } else if (c instanceof PsiSwitchLabelStatement label) {
+                int start = label.getTextRange().getStartOffset();
+                int end   = body.getTextRange().getEndOffset() - 1;  // before "}"
+                for (int j = i + 1; j < children.length; j++) {
+                    if (children[j] instanceof PsiSwitchLabelStatement next) {
+                        end = next.getTextRange().getStartOffset();
+                        break;
+                    }
+                }
+                if (end > start) out.add(new TextRange(start, end));
+            }
+        }
+    }
+
+    /** Returns the case range when the active element is inside an arm; otherwise its own range. */
+    private static @NotNull TextRange computeActiveCFRange(@NotNull PsiElement cf) {
+        if (cf instanceof PsiSwitchLabeledRuleStatement rule) return rule.getTextRange();
+        if (cf instanceof PsiSwitchLabelStatement label) {
+            PsiElement parent = label.getParent();
+            if (parent instanceof PsiCodeBlock body) {
+                PsiElement[] children = body.getChildren();
+                int start = label.getTextRange().getStartOffset();
+                int end   = body.getTextRange().getEndOffset() - 1;
+                boolean past = false;
+                for (PsiElement c : children) {
+                    if (past && c instanceof PsiSwitchLabelStatement next) {
+                        end = next.getTextRange().getStartOffset();
+                        break;
+                    }
+                    if (c == label) past = true;
+                }
+                if (end > start) return new TextRange(start, end);
+            }
+        }
+        return cf.getTextRange();
+    }
+
     @Nullable
     private static PsiElement findParentControlFlow(@Nullable PsiElement element) {
         PsiElement cur = element;
+        // Prefer the nearest case-arm so individual branches can be focused.
         while (cur != null) {
+            if (cur instanceof PsiSwitchLabeledRuleStatement) return cur;
+            if (cur instanceof PsiSwitchLabelStatement) return cur;
             if (cur instanceof PsiIfStatement) return cur;
             if (cur instanceof PsiSwitchStatement) return cur;
             if (cur instanceof PsiSwitchExpression) return cur;

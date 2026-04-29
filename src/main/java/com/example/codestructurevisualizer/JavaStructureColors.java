@@ -28,11 +28,11 @@ final class JavaStructureColors {
     // Deeper nesting gets progressively lower alpha so stacked layers don't
     // overwhelm the text; the colour difference makes each level distinct.
     private static final float[] METHOD_LEVEL_ALPHAS = {
-            0.75f,  // level 1
-            0.55f,  // level 2
-            0.50f,  // level 3
-            0.45f,  // level 4
-            0.40f,  // level 5+
+            0.66f,  // level 1
+            0.48f,  // level 2
+            0.42f,  // level 3
+            0.36f,  // level 4
+            0.30f,  // level 5+
     };
 
     static Color methodLevelColor(int level) {

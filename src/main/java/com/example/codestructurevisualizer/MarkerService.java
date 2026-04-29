@@ -105,11 +105,29 @@ public final class MarkerService implements Disposable {
         editor.getScrollingModel().scrollToCaret(ScrollType.CENTER);
     }
 
-    /** Toggles "marker focus mode": dims + folds all non-marked regions. */
+    /**
+     * Toggles "marker focus mode": dims + folds all non-marked regions.
+     *
+     * @return new state of focus mode (true = enabled), or {@code false} if
+     *         the toggle was rejected because no markers were placed yet
+     *         (so the menu / notification can correctly inform the user).
+     */
     public boolean toggleFocusMode() {
+        // Refuse to enable focus mode when there are no markers anywhere –
+        // that combination silently dims/folds nothing and looks broken.
+        if (!focusModeEnabled && !hasAnyMarkers()) {
+            return false;
+        }
         focusModeEnabled = !focusModeEnabled;
         refreshAllOpenEditors();
         return focusModeEnabled;
+    }
+
+    /** True if at least one marker exists in any file. */
+    public boolean hasAnyMarkers() {
+        for (TreeSet<Integer> s : fileMarkers.values())
+            if (s != null && !s.isEmpty()) return true;
+        return false;
     }
 
     public boolean isFocusModeEnabled() { return focusModeEnabled; }
@@ -208,6 +226,17 @@ public final class MarkerService implements Disposable {
                     if (r != null) {
                         r.setExpanded(false);
                         created.add(r);
+                    } else {
+                        // Bug-fix: addFoldRegion returns null when [s,e] overlaps an
+                        // existing IDE-managed fold region (imports, javadoc, methods).
+                        // Collapse every overlapping pre-existing region instead so
+                        // the focused area still appears truly hidden.
+                        for (FoldRegion existing : editor.getFoldingModel().getAllFoldRegions()) {
+                            if (!existing.isValid()) continue;
+                            if (existing.getStartOffset() < e && existing.getEndOffset() > s) {
+                                existing.setExpanded(false);
+                            }
+                        }
                     }
                 }
             });

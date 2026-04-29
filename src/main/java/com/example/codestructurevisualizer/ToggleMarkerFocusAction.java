@@ -25,12 +25,23 @@ public final class ToggleMarkerFocusAction extends AnAction implements DumbAware
         Project p = e.getProject();
         if (p == null) return;
         MarkerService svc = p.getService(MarkerService.class);
-        boolean on = svc.toggleFocusMode();
+        boolean wasOn = svc.isFocusModeEnabled();
+        boolean on    = svc.toggleFocusMode();
+
+        // Detect the "rejected because no markers exist" case: the toggle
+        // was off, requested to enable, but the service kept it off.
+        String message;
+        NotificationType type = NotificationType.INFORMATION;
+        if (!wasOn && !on) {
+            message = "No markers placed yet — press Ctrl+Alt+Shift+M on a line first";
+            type    = NotificationType.WARNING;
+        } else {
+            message = on ? "Marker focus mode enabled"
+                         : "Marker focus mode disabled";
+        }
         NotificationGroupManager.getInstance()
                 .getNotificationGroup("Code Structure Visualizer")
-                .createNotification(on ? "Marker focus mode enabled"
-                                       : "Marker focus mode disabled",
-                        NotificationType.INFORMATION)
+                .createNotification(message, type)
                 .notify(p);
     }
 
