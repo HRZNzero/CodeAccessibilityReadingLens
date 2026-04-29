@@ -27,6 +27,8 @@ import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -317,6 +319,17 @@ public final class MarkerService implements Disposable {
             int lh        = editor.getLineHeight();
             int width     = editor.getContentComponent().getWidth();
 
+            // ── perf: clip line range to what's visible ───────────────────
+            Rectangle clip = g.getClipBounds();
+            int from = startLine, to = endLine;
+            if (clip != null) {
+                int firstVis = editor.xyToLogicalPosition(new Point(0, clip.y)).line;
+                int lastVis  = editor.xyToLogicalPosition(new Point(0, clip.y + clip.height)).line;
+                if (firstVis > from) from = firstVis;
+                if (lastVis  < to)   to   = lastVis;
+                if (from > to) return;
+            }
+
             // Skip lines that overlap the active selection so the native
             // selection highlight remains clearly visible (same guard used by
             // AlphaBackgroundRenderer in JavaStructureHighlighterService).
@@ -325,17 +338,18 @@ public final class MarkerService implements Disposable {
             int selStart         = hasSel ? sel.getSelectionStart() : -1;
             int selEnd           = hasSel ? sel.getSelectionEnd()   : -1;
 
+            int yAnchor = editor.logicalPositionToXY(new LogicalPosition(from, 0)).y;
             Graphics2D g2 = (Graphics2D) g.create();
             try {
                 g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.62f));
                 g2.setColor(DIM);
-                for (int line = startLine; line <= endLine; line++) {
+                int y = yAnchor;
+                for (int line = from; line <= to; line++, y += lh) {
                     if (hasSel) {
                         int ls = doc.getLineStartOffset(line);
                         int le = doc.getLineEndOffset(line);
                         if (selStart < le && selEnd > ls) continue;
                     }
-                    int y = editor.logicalPositionToXY(new LogicalPosition(line, 0)).y;
                     g2.fillRect(0, y, width, lh);
                 }
             } finally {

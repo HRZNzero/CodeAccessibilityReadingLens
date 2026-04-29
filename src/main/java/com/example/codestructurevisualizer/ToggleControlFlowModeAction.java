@@ -9,7 +9,7 @@ import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Toggles Control-Flow View mode (Ctrl+Shift+O).
+ * Toggles Control-Flow View mode (Ctrl+Shift+Alt+C).
  *
  * While active the normal method / bracket-level colouring is replaced by a
  * single orange overlay (#d17524, 55 % opacity) drawn on every if/else chain

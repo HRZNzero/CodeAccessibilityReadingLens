@@ -9,7 +9,7 @@ import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Toggles "Marker Focus Mode" (Ctrl+Alt+Shift+H).
+ * Toggles "Marker Focus Mode" (Ctrl+Alt+Shift+0).
  *
  * When active, all lines that do NOT have a marker placed on them are:
  *   • dimmed with a 62 % dark overlay, AND

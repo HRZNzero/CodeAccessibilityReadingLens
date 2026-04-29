@@ -44,6 +44,8 @@ import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -479,26 +481,29 @@ public final class JavaStructureHighlighterService implements Disposable {
     private static void annotateControlFlow(@NotNull PsiJavaFile file, @NotNull Editor editor,
                                             @NotNull List<RangeHighlighter> out, boolean indented) {
         file.accept(new JavaRecursiveElementWalkingVisitor() {
+            int depth = 0;
+
+            private void paintCF(@Nullable TextRange r) {
+                if (r == null || r.isEmpty()) return;
+                int level = Math.min(depth + 1, 5);
+                addLineBlock(editor, r, JavaStructureColors.CONTROL_FLOW_COLOR,
+                        JavaStructureColors.controlFlowAlpha(level), out, level, indented);
+            }
+
             @Override public void visitIfStatement(@NotNull PsiIfStatement stmt) {
-                TextRange r = stmt.getTextRange();
-                if (r != null && !r.isEmpty())
-                    addLineBlock(editor, r, JavaStructureColors.CONTROL_FLOW_COLOR,
-                            JavaStructureColors.CONTROL_FLOW_ALPHA, out, 0, indented);
-                super.visitIfStatement(stmt);
+                paintCF(stmt.getTextRange());
+                depth++;
+                try { super.visitIfStatement(stmt); } finally { depth--; }
             }
             @Override public void visitSwitchStatement(@NotNull PsiSwitchStatement stmt) {
-                TextRange r = stmt.getTextRange();
-                if (r != null && !r.isEmpty())
-                    addLineBlock(editor, r, JavaStructureColors.CONTROL_FLOW_COLOR,
-                            JavaStructureColors.CONTROL_FLOW_ALPHA, out, 0, indented);
-                super.visitSwitchStatement(stmt);
+                paintCF(stmt.getTextRange());
+                depth++;
+                try { super.visitSwitchStatement(stmt); } finally { depth--; }
             }
             @Override public void visitSwitchExpression(@NotNull PsiSwitchExpression expr) {
-                TextRange r = expr.getTextRange();
-                if (r != null && !r.isEmpty())
-                    addLineBlock(editor, r, JavaStructureColors.CONTROL_FLOW_COLOR,
-                            JavaStructureColors.CONTROL_FLOW_ALPHA, out, 0, indented);
-                super.visitSwitchExpression(expr);
+                paintCF(expr.getTextRange());
+                depth++;
+                try { super.visitSwitchExpression(expr); } finally { depth--; }
             }
         });
     }
@@ -625,6 +630,19 @@ public final class JavaStructureHighlighterService implements Disposable {
             int lh        = editor.getLineHeight();
             int width     = editor.getContentComponent().getWidth();
 
+            // ── perf: clip the line range to what's actually visible ─────────
+            Rectangle clip = g.getClipBounds();
+            int from = startLine, to = endLine;
+            if (clip != null) {
+                int cTop = clip.y;
+                int cBot = clip.y + clip.height;
+                int firstVis = editor.xyToLogicalPosition(new Point(0, cTop)).line;
+                int lastVis  = editor.xyToLogicalPosition(new Point(0, cBot)).line;
+                if (firstVis > from) from = firstVis;
+                if (lastVis  < to)   to   = lastVis;
+                if (from > to) return;
+            }
+
             // Selection – skip lines that have selected text so the native
             // selection highlight remains clearly visible.
             SelectionModel sel    = editor.getSelectionModel();
@@ -647,20 +665,24 @@ public final class JavaStructureHighlighterService implements Disposable {
                 xStart = editor.logicalPositionToXY(new LogicalPosition(startLine, col)).x;
             }
 
-            int paintH = Math.max(1, lh - lineInset);
+            int paintH  = Math.max(1, lh - lineInset);
+            int rectW   = width - xStart;
+            // Anchor y once and increment; correct because LINES_IN_RANGE
+            // highlighters are not painted across folded regions (the editor
+            // dispatches separate paint() calls per visible chunk via clip).
+            int yAnchor = editor.logicalPositionToXY(new LogicalPosition(from, 0)).y;
             Graphics2D g2 = (Graphics2D) g.create();
             try {
                 g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
                 g2.setColor(color);
-                for (int line = startLine; line <= endLine; line++) {
-                    // Don't paint over lines that intersect the active selection
+                int y = yAnchor;
+                for (int line = from; line <= to; line++, y += lh) {
                     if (hasSelection) {
                         int ls = doc.getLineStartOffset(line);
                         int le = doc.getLineEndOffset(line);
                         if (selStart < le && selEnd > ls) continue;
                     }
-                    int y = editor.logicalPositionToXY(new LogicalPosition(line, 0)).y;
-                    g2.fillRect(xStart, y + lineInset, width - xStart, paintH);
+                    g2.fillRect(xStart, y + lineInset, rectW, paintH);
                 }
             } finally {
                 g2.dispose();

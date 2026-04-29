@@ -12,7 +12,7 @@ final class JavaStructureColors {
 
     // ── field group ────────────────────────────────────────────────────────────
     static final Color FIELD_GROUP_COLOR = new Color(0x72, 0x9e, 0x09);  // #729e09
-    static final float FIELD_GROUP_ALPHA = 0.35f;
+    static final float FIELD_GROUP_ALPHA = 0.25f;
 
     // ── method / nested-block levels ───────────────────────────────────────────
     // Colours become slightly more teal-tinted at deeper nesting levels so that
@@ -57,5 +57,25 @@ final class JavaStructureColors {
     // ── control-flow highlight ─────────────────────────────────────────────────
     /** Used by the Control-Flow View mode to mark if/else/switch blocks. */
     static final Color CONTROL_FLOW_COLOR = new Color(0xd1, 0x75, 0x24);  // #d17524
-    static final float CONTROL_FLOW_ALPHA = 0.40f;  // was 0.55 – lowered by 15 %
+
+    /**
+     * Per-nesting-level alphas for control-flow view, kept very low so the
+     * code remains comfortably readable underneath the colour wash.
+     * Index 0 = outermost CF block, index 4 = level-5+.
+     */
+    private static final float[] CONTROL_FLOW_ALPHAS = {
+            0.15f,  // level 1 – outermost if/switch
+            0.20f,  // level 2
+            0.25f,  // level 3
+            0.30f,  // level 4
+            0.35f,  // level 5+
+    };
+
+    static float controlFlowAlpha(int level) {
+        int i = Math.max(1, Math.min(level, CONTROL_FLOW_ALPHAS.length)) - 1;
+        return CONTROL_FLOW_ALPHAS[i];
+    }
+
+    /** Legacy single-alpha accessor (kept for the cursor-focus dim layer). */
+    static final float CONTROL_FLOW_ALPHA = CONTROL_FLOW_ALPHAS[0];
 }
