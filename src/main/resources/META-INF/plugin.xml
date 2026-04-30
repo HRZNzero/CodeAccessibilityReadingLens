@@ -1,12 +1,24 @@
 <idea-plugin>
-    <id>com.example.codestructurevisualizer</id>
+    <id>me.netizendev.codestructurevisualizer</id>
     <name>Code Structure Visualizer</name>
-    <vendor email="support@example.com">Example</vendor>
+    <vendor email="contact.netizendev@gmail.com">Example</vendor>
     <description><![CDATA[
-        Adds subtle colour-coded background groups to Java files.
-        Optional nested bracket-level colouring, focus/dim mode, camelCase word-spacing,
-        indented-box layout, wider field spacing, syntax token emphasis, and
-        a control-flow view that highlights all if/else/switch blocks.
+        Plugin intended for accessibility and code clarity. This plugin offers various toggles for visual enhancements aiming at making code segmentation clear,
+        indicate levels of hierarchy and helps users with disabilities like dyslexia navigate code easily. All elements can be toggled via shortcuts.
+        List of shortcuts:
+
+        Ctrl+Alt+Shift+B T  ->    Toggle Code Structure Overlay
+        Ctrl+Alt+Shift+G    ->    Toggle Nested Code Block Colours
+        Ctrl+Alt+Shift+F    ->    Toggle Focus/Dim Mode
+        Ctrl+Alt+Shift+W    ->    Toggle Identifier Word-Spacing
+        Ctrl+Alt+Shift+Y    ->    Configure Syntax Emphasis
+        Ctrl+Alt+Shift+X    ->    Toggle Indented Boxes
+        Ctrl+Alt+Shift+K    ->    Toggle Wider Field Spacing
+        Ctrl+Alt+Shift+Q    ->    Toggle Control-Flow View
+        Ctrl+Alt+Shift+N    ->    Toggle Line Marker (was Ctrl+Alt+M — broken)
+        Ctrl+Alt+Down       ->    Jump to Next Marker
+        Ctrl+Alt+Up         ->    Jump to Previous Marker
+        Ctrl+Alt+Shift+Z    ->    Toggle Marker Focus Mode
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -15,21 +27,20 @@
     <idea-version since-build="253"/>
 
     <extensions defaultExtensionNs="com.intellij">
-        <postStartupActivity implementation="com.example.codestructurevisualizer.JavaStructureStartupActivity"/>
+        <postStartupActivity implementation="me.netizendev.codestructurevisualizer.JavaStructureStartupActivity"/>
         <notificationGroup id="Code Structure Visualizer" displayType="BALLOON"/>
-        <projectService serviceImplementation="com.example.codestructurevisualizer.CamelCaseSpacingService"/>
-        <projectService serviceImplementation="com.example.codestructurevisualizer.SyntaxEmphasisSettings"/>
-        <projectService serviceImplementation="com.example.codestructurevisualizer.SyntaxEmphasisService"/>
-        <projectService serviceImplementation="com.example.codestructurevisualizer.MarkerService"/>
-        <projectService serviceImplementation="com.example.codestructurevisualizer.JavaStructureHighlighterService"/>
-        <!-- Ensures Ctrl+Alt+M resolves to PlaceMarker instead of the built-in ExtractMethod -->
-        <actionPromoter implementation="com.example.codestructurevisualizer.PlaceMarkerActionPromoter"/>
+        <projectService serviceImplementation="me.netizendev.codestructurevisualizer.CamelCaseSpacingService"/>
+        <projectService serviceImplementation="me.netizendev.codestructurevisualizer.SyntaxEmphasisSettings"/>
+        <projectService serviceImplementation="me.netizendev.codestructurevisualizer.SyntaxEmphasisService"/>
+        <projectService serviceImplementation="me.netizendev.codestructurevisualizer.MarkerService"/>
+        <projectService serviceImplementation="me.netizendev.codestructurevisualizer.JavaStructureHighlighterService"/>
+        <actionPromoter implementation="me.netizendev.codestructurevisualizer.PlaceMarkerActionPromoter"/>
     </extensions>
 
     <actions>
         <!-- ── core overlay ──────────────────────────────────────────────── -->
         <action id="CodeStructureVisualizer.ToggleOverlay"
-                class="com.example.codestructurevisualizer.ToggleJavaStructureOverlayAction"
+                class="me.netizendev.codestructurevisualizer.ToggleJavaStructureOverlayAction"
                 text="Toggle Code Structure Overlay"
                 description="Turn the Java structure visualization overlay on or off">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift B"/>
@@ -37,7 +48,7 @@
         </action>
 
         <action id="CodeStructureVisualizer.ToggleNestedSubsections"
-                class="com.example.codestructurevisualizer.ToggleNestedSubsectionsOverlayAction"
+                class="me.netizendev.codestructurevisualizer.ToggleNestedSubsectionsOverlayAction"
                 text="Toggle Nested Code Block Colours"
                 description="Turn nested bracket-level colouring inside methods on or off">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift G"/>
@@ -46,7 +57,7 @@
 
         <!-- ── focus / dim  (was D – conflicted; now F for Focus) ────────── -->
         <action id="CodeStructureVisualizer.ToggleInspectionMode"
-                class="com.example.codestructurevisualizer.ToggleInspectionModeAction"
+                class="me.netizendev.codestructurevisualizer.ToggleInspectionModeAction"
                 text="Toggle Focus Mode (Dim)"
                 description="Dim all code except the bracket / method the cursor is currently in">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift F"/>
@@ -55,16 +66,15 @@
 
         <!-- ── camelCase word-spacing ─────────────────────────────────────── -->
         <action id="CodeStructureVisualizer.ToggleCamelCaseSpacing"
-                class="com.example.codestructurevisualizer.ToggleCamelCaseSpacingAction"
+                class="me.netizendev.codestructurevisualizer.ToggleCamelCaseSpacingAction"
                 text="Toggle Identifier Word-Spacing"
                 description="Add tiny visual gaps + bold at camelCase/snake_case word boundaries">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift W"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
 
-        <!-- ── syntax emphasis config  (was E – conflicted; now Y) ────────── -->
         <action id="CodeStructureVisualizer.SyntaxEmphasisConfig"
-                class="com.example.codestructurevisualizer.ToggleSyntaxEmphasisAction"
+                class="me.netizendev.codestructurevisualizer.ToggleSyntaxEmphasisAction"
                 text="Configure Syntax Emphasis (Bold / Colour)…"
                 description="Toggle bold and custom colour for if / ( ) / ? / ; / &quot; / . / { } / [ ] / &lt;&gt;">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift Y"/>
@@ -73,7 +83,7 @@
 
         <!-- ── indented boxes ─────────────────────────────────────────────── -->
         <action id="CodeStructureVisualizer.ToggleIndentedBoxes"
-                class="com.example.codestructurevisualizer.ToggleIndentedBoxesAction"
+                class="me.netizendev.codestructurevisualizer.ToggleIndentedBoxesAction"
                 text="Toggle Indented Boxes"
                 description="Start each colour band at its block's indentation column (nested-box look)">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift X"/>
@@ -82,7 +92,7 @@
 
         <!-- ── wider field spacing ───────────────────────────────────────── -->
         <action id="CodeStructureVisualizer.ToggleWiderFieldSpacing"
-                class="com.example.codestructurevisualizer.ToggleWiderFieldSpacingAction"
+                class="me.netizendev.codestructurevisualizer.ToggleWiderFieldSpacingAction"
                 text="Toggle Wider Field Spacing"
                 description="Add a thin separator gap between consecutive field background rows">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift K"/>
@@ -91,7 +101,7 @@
 
         <!-- ── control-flow view ─────────────────────────────────────────── -->
         <action id="CodeStructureVisualizer.ToggleControlFlowMode"
-                class="com.example.codestructurevisualizer.ToggleControlFlowModeAction"
+                class="me.netizendev.codestructurevisualizer.ToggleControlFlowModeAction"
                 text="Toggle Control-Flow View"
                 description="Highlight all if/else/switch blocks in orange; hides level colouring">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift Q"/>
@@ -100,7 +110,7 @@
 
         <!-- ── marker system ─────────────────────────────────────────────── -->
         <action id="CodeStructureVisualizer.PlaceMarker"
-                class="com.example.codestructurevisualizer.PlaceMarkerAction"
+                class="me.netizendev.codestructurevisualizer.PlaceMarkerAction"
                 text="Toggle Line Marker"
                 description="Place or remove a marker on the current line (orange gutter stripe)">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt M"/>
@@ -109,7 +119,7 @@
         </action>
 
         <action id="CodeStructureVisualizer.JumpToNextMarker"
-                class="com.example.codestructurevisualizer.JumpToNextMarkerAction"
+                class="me.netizendev.codestructurevisualizer.JumpToNextMarkerAction"
                 text="Jump to Next Marker"
                 description="Move caret to the next marker in the file, wrapping around">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt DOWN"/>
@@ -117,7 +127,7 @@
         </action>
 
         <action id="CodeStructureVisualizer.JumpToPrevMarker"
-                class="com.example.codestructurevisualizer.JumpToPrevMarkerAction"
+                class="me.netizendev.codestructurevisualizer.JumpToPrevMarkerAction"
                 text="Jump to Previous Marker"
                 description="Move caret to the previous marker in the file, wrapping around">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt UP"/>
@@ -125,7 +135,7 @@
         </action>
 
         <action id="CodeStructureVisualizer.ToggleMarkerFocus"
-                class="com.example.codestructurevisualizer.ToggleMarkerFocusAction"
+                class="me.netizendev.codestructurevisualizer.ToggleMarkerFocusAction"
                 text="Toggle Marker Focus Mode"
                 description="Dim and fold all non-marked lines so only marked sections are visible">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift Z"/>

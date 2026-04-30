@@ -1,4 +1,4 @@
-package com.example.codestructurevisualizer;
+package me.netizendev.codestructurevisualizer;
 
 import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.Disposable;

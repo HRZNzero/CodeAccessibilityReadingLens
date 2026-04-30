@@ -1,4 +1,4 @@
-package com.example.codestructurevisualizer;
+package me.netizendev.codestructurevisualizer;
 
 /**
  * Legacy placeholder retained only to keep the package stable.

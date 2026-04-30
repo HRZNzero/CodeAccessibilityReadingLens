@@ -1,4 +1,4 @@
-package com.example.codestructurevisualizer;
+package me.netizendev.codestructurevisualizer;
 
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;

@@ -1,4 +1,4 @@
-package com.example.codestructurevisualizer;
+package me.netizendev.codestructurevisualizer;
 
 import java.awt.Color;
 

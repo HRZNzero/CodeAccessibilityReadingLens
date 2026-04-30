@@ -1,4 +1,4 @@
-package com.example.codestructurevisualizer;
+package me.netizendev.codestructurevisualizer;
 
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.Service;

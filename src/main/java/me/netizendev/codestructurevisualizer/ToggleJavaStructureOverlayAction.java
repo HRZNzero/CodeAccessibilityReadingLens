@@ -1,4 +1,4 @@
-package com.example.codestructurevisualizer;
+package me.netizendev.codestructurevisualizer;
 
 import com.intellij.notification.NotificationGroupManager;
 import com.intellij.notification.NotificationType;
@@ -8,7 +8,7 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
 
-public final class ToggleNestedSubsectionsOverlayAction extends AnAction implements DumbAware {
+public final class ToggleJavaStructureOverlayAction extends AnAction implements DumbAware {
     @Override
     public void actionPerformed(@NotNull AnActionEvent event) {
         Project project = event.getProject();
@@ -17,13 +17,13 @@ public final class ToggleNestedSubsectionsOverlayAction extends AnAction impleme
         }
 
         JavaStructureHighlighterService service = project.getService(JavaStructureHighlighterService.class);
-        boolean nowEnabled = service.toggleNestedSubsectionsEnabled();
+        boolean nowEnabled = service.toggleEnabled();
         service.refreshAllOpenJavaEditorsNow();
 
         NotificationGroupManager.getInstance()
                 .getNotificationGroup("Code Structure Visualizer")
                 .createNotification(
-                        nowEnabled ? "Nested code block colours enabled" : "Nested code block colours disabled",
+                        nowEnabled ? "Code structure overlay enabled" : "Code structure overlay disabled",
                         NotificationType.INFORMATION
                 )
                 .notify(project);
@@ -39,8 +39,8 @@ public final class ToggleNestedSubsectionsOverlayAction extends AnAction impleme
         }
 
         JavaStructureHighlighterService service = project.getService(JavaStructureHighlighterService.class);
-        event.getPresentation().setText(service.isNestedSubsectionsEnabled()
-                ? "Disable Nested Code Block Colours"
-                : "Enable Nested Code Block Colours");
+        event.getPresentation().setText(service.isEnabled()
+                ? "Disable Code Structure Overlay"
+                : "Enable Code Structure Overlay");
     }
 }

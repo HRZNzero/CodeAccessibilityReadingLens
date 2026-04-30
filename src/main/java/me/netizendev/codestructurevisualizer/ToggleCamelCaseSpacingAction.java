@@ -1,4 +1,4 @@
-package com.example.codestructurevisualizer;
+package me.netizendev.codestructurevisualizer;
 
 import com.intellij.notification.NotificationGroupManager;
 import com.intellij.notification.NotificationType;
