@@ -22,6 +22,8 @@
         <projectService serviceImplementation="com.example.codestructurevisualizer.SyntaxEmphasisService"/>
         <projectService serviceImplementation="com.example.codestructurevisualizer.MarkerService"/>
         <projectService serviceImplementation="com.example.codestructurevisualizer.JavaStructureHighlighterService"/>
+        <!-- Ensures Ctrl+Alt+M resolves to PlaceMarker instead of the built-in ExtractMethod -->
+        <actionPromoter implementation="com.example.codestructurevisualizer.PlaceMarkerActionPromoter"/>
     </extensions>
 
     <actions>
@@ -102,6 +104,7 @@
                 text="Toggle Line Marker"
                 description="Place or remove a marker on the current line (orange gutter stripe)">
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt M"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="alt M"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
 
